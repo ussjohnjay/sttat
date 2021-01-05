@@ -1,0 +1,445 @@
+*
+{
+	margin: 0;
+	padding: 0;
+	box-sizing: border-box;
+}
+
+html
+{
+	scroll-behavior: smooth;
+}
+
+body
+{
+	background: black;
+	color: white;
+}
+
+h1,h3
+{
+	margin-bottom: 1.1em;
+}
+h1
+{
+	text-align: center;
+	font-size: 1.5em;
+}
+h4
+{
+	margin-bottom: .4em;
+}
+
+a
+{
+	color: white;
+}
+a.external
+{
+	font-weight: bold;
+}
+
+select,
+input[type=textbox]
+{
+	padding: 3px;
+}
+textarea
+{
+	width: 100%;
+	height: 80px;
+	padding: 5px 10px;
+}
+button
+{
+	padding: 10px;
+}
+
+/* Main Container */
+#container
+{
+	width: 100%;
+	max-width: 600px;
+	margin: 0 auto;
+}
+@media screen and (max-width: 800px)
+{
+}
+
+/* Status Toast */
+#status
+{
+	width: 95%;
+	max-width: 400px;
+	height: 40px;
+	padding: 10px;
+	text-align: center;
+	color: #222;
+	font-weight: bold;
+	border: 1px solid #444;
+	background: #F0E68C;
+
+	position: fixed;
+	bottom: 15%;
+	left: 50%;
+	transform: translate(-50%, 500%);
+
+	transition: transform 0.2s ease-in;
+}
+#status.showing
+{
+	transform: translate(-50%, 0);
+	transition: transform 0.25s ease-out;
+	opacity: 1;
+}
+#status.working
+{
+	background: linear-gradient(270deg, white, #F0E68C, #FFFFE0);
+	background-size: 400% 400%;
+	animation: throb 15s ease infinite;
+}
+@keyframes throb
+{
+	0% { background-position: 0% 50%; }
+	50% { background-position: 100% 50%; }
+	100% { background-position: 0% 50%; }
+}
+#status.success
+{
+	background-color: #FFFFE0;
+	animation: greenfade 2s forwards;
+}
+@keyframes greenfade
+{
+	from {background-color: #FFFFE0; color: #222;}
+	to {background-color: #D6F4B8; color: green;}
+}
+#status.failure
+{
+	background-color: #FFFFE0;
+	animation: redfade 2s forwards;
+}
+@keyframes redfade
+{
+	from {background-color: #FFFFE0; color: #222;}
+	to {background-color: salmon; color: red;}
+}
+#status.success:hover,
+#status.failure:hover
+{
+	cursor: pointer;
+}
+
+/* Character Card */
+#card
+{
+	width: 90%;
+	max-width: 400px;
+	height: 80%;
+	max-height: 400px;
+	padding: 10px;
+	border: 1px solid #444;
+	border-top: 3px solid #444;
+	background: white;
+	color: black;
+	display: flex;
+	flex-direction: column;
+	justify-content: space-between;
+
+	position: fixed;
+	bottom: 0;
+	left: 50%;
+	transform: translate(-50%, 500%);
+
+	transition: transform 0.2s ease-in;
+}
+
+#card.showing
+{
+	transform: translate(-50%, 0);
+	transition: transform 0.25s ease-out;
+	opacity: 1;
+}
+
+#card.rarity-5 { background: linear-gradient(180deg, #fff2cc 40px, white 70px); border-color: #7f6000; }
+#card.rarity-4 { background: linear-gradient(180deg, #d9d2e9 40px, white 70px); border-color: #674ea7; }
+#card.rarity-3 { background: linear-gradient(180deg, #c9daf8 40px, white 70px); border-color: #1155cc; }
+#card.rarity-2 { background: linear-gradient(180deg, #d9ead3 40px, white 70px); border-color: #38761d; }
+#card.rarity-1 { background: linear-gradient(180deg, gray 40px, white 70px); border-color: black; }
+
+#card #card-name
+{
+	font-weight: bold;
+	font-size: 1.1em;
+}
+#card.rarity-5 #card-name { color: #7f6000; }
+#card.rarity-4 #card-name { color: #674ea7; }
+#card.rarity-3 #card-name { color: #1155cc; }
+#card.rarity-2 #card-name { color: #38761d; }
+#card.rarity-1 #card-name { color: black; }
+
+#card #card-links
+{
+	margin: 0 auto;
+}
+#card #card-links div
+{
+	display: flex;
+	flex-direction: column;
+	text-align: center;
+}
+#card #card-closer
+{
+	text-align: center;
+	font-size: .9em;
+	font-weight: bold;
+}
+
+#card a,
+#card a:link
+{
+	color: #222;
+	text-decoration: none;
+}
+#card a:hover,
+#card a:active
+{
+	background: #EFEFEF;
+	color: black;
+	text-decoration: underline;
+}
+
+/* Sections */
+section.main
+{
+	margin: 0 auto;
+	padding: 1em;
+	background: #333;
+	border-left: 5px solid gray;
+	transition: border 0.25s ease-out;
+}
+section.main + section.main
+{
+	margin-top: 4em;
+}
+section.main:hover
+{
+	border-left: 5px solid white;
+}
+section.sub + section.sub
+{
+	margin-top: 1.5em;
+}
+section p + p
+{
+	margin-top: 1em;
+}
+section#first
+{
+	text-align: center;
+}
+
+/* Data Table */
+table.databox
+{
+	width: 100%;
+	margin: .5em 0;
+	border-collapse: collapse;
+	color: black;
+}
+table.databox th,
+table.databox td
+{
+	padding: 6px;
+	border: #4e95f4 1px solid;
+}
+
+table.databox thead tr
+{
+	background: #EFEFEF;
+}
+table.databox thead th
+{
+	color: #222222;
+	font-weight: bold;
+}
+table.databox tbody tr:nth-child(odd)
+{
+	background: #b8d1f3;
+}
+table.databox tbody tr:nth-child(even)
+{
+	background: #dae5f4;
+}
+table.databox tbody tr:hover
+{
+	background: #d0d0d0;
+}
+table.databox tbody tr.clickable:hover
+{
+	cursor: pointer;
+}
+
+td.prime
+{
+	font-weight: bold;
+}
+td.inlinehead
+{
+	text-align: right;
+	color: #222222;
+}
+td.seat
+{
+	text-align: center;
+	white-space: nowrap;
+}
+td.rarity
+{
+	width: 80px;
+}
+td.range
+{
+	text-align: center;
+}
+td.score
+{
+	width: 80px;
+	text-align: right;
+}
+td.traitinput
+{
+	text-align: center;
+}
+
+div.optionsgrid
+{
+	display: grid;
+	grid-template-columns: auto auto;
+	grid-row-gap: .8em;
+	align-items: center;
+}
+div.optionsgrid div.label
+{
+	text-align: right;
+	white-space: nowrap;
+	padding-right: 6px;
+}
+div.optionslist p + p
+{
+	margin-top: .5em;
+}
+div.optionspostnote
+{
+	margin-top: -.3em;
+	text-align: right;
+}
+div.optionsbuttons
+{
+	margin-top: 2em;
+	display: flex;
+	justify-content: flex-end;
+}
+
+/* Specific IO */
+#skillSelect
+{
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+#skillSelect a
+{
+	display: inline-block;
+	width: 60px;
+	padding: 3px 6px;
+	border: 1px solid gray;
+	text-align: center;
+	text-decoration: none;
+}
+#skillSelect a:not(:focus):hover
+{
+	background: #d0d0d0;
+	color: black;
+}
+#skillSelect a.select
+{
+	font-weight: bold;
+	border: 1px solid #4e95f4;
+	background: #b8d1f3;
+	color: black;
+}
+
+#voyageExcludeList
+{
+	margin: .5em 0;
+	padding: 6px;
+	border: #4e95f4 1px solid;
+	background: #dae5f4;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+#voyageExcludeList a
+{
+	display: inline-block;
+	padding: 3px 6px;
+	border: 1px solid #4e95f4;
+	background: #b8d1f3;
+	color: maroon;
+	text-decoration: none;
+	padding: 3px 6px;
+	border: 1px solid #4e95f4;
+	background: #b8d1f3;
+	color: maroon;
+	text-decoration: none;
+}
+#voyageExcludeList a:hover,
+#voyageExcludeList a:active
+{
+	background: #d0d0d0;
+	color: green;
+	border: 1px solid green;
+}
+#voyageExcludeList:empty:before
+{
+	content: "(No crew will be excluded)";
+	color: gray;
+}
+
+#shipline
+{
+	display: flex;
+	justify-content: space-between;
+}
+#out-ship,
+#out-shiptrait,
+#out-antimatter
+{
+	font-weight: bold;
+}
+
+/* Misc */
+.hide
+{
+	display: none;
+}
+span.strike
+{
+	text-decoration: line-through;
+}
+span.strong
+{
+	font-weight: bold;
+}
+p.importlink
+{
+	margin: 1em 0;
+	text-align: center;
+	font-size: 1.2em;
+}
+a.clearlink
+{
+	font-size: .9em;
+}
