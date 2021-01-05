@@ -572,6 +572,10 @@ function findCrew() {
 					bConsider = true;
 					break;
 				}
+				else if (sttat.crew[i].traits_hidden.indexOf(traits[t]) >= 0) {
+					bConsider = true;
+					break;
+				}
 			}
 		}
 		if (iScore > 0 && bConsider) {
