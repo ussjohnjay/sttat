@@ -476,7 +476,12 @@ function toggleSkill(skillName) {
 	return false;
 }
 
-function findCrew() {
+function findAllCrew() {
+	findCrew(false);
+	return false;
+}
+
+function findCrew(bLimit = true) {
 	let iScoreType = document.getElementById('sort-score').value;
 	let iMaxSkills = 3;
 	if (iScoreType == 2)
@@ -594,11 +599,14 @@ function findCrew() {
 	let tableColumns = [{'id': 'name', 'title': 'Name', 'class': ''},
 					{'id': 'rarity', 'title': 'Rarity', 'class': 'rarity'},
 					{'id': 'score', 'title': 'Score', 'class': 'score'}];
-	updateFinderTable(filtered, tableColumns);
+	updateFinderTable(filtered, tableColumns, bLimit);
 }
 
-function updateFinderTable(tableData, tableColumns)
+function updateFinderTable(tableData, tableColumns, bLimit)
 {
+	let iLimit = Math.min(tableData.length, 20);
+	if (!bLimit) iLimit = tableData.length;
+
 	let table = document.createElement('table');
 	let tHead = document.createElement('thead');
 	let trHead = document.createElement('tr');
@@ -612,7 +620,7 @@ function updateFinderTable(tableData, tableColumns)
 	table.appendChild(tHead);
 
 	let tBody = document.createElement('tbody');
-	for (let i = 0; i < Math.min(tableData.length, 20); i++)
+	for (let i = 0; i < iLimit; i++)
 	{
     let tr = document.createElement('tr');
 		tr.className = 'clickable';
@@ -631,10 +639,10 @@ function updateFinderTable(tableData, tableColumns)
 
 	let showing = document.createElement('div');
 	showing.className = "optionspostnote";
-	if (tableData.length <= 20)
+	if (tableData.length <= iLimit)
 		showing.innerHTML = "Showing all "+tableData.length+" matching crew.";
 	else
-		showing.innerHTML = "Showing 20 of "+tableData.length+" matching crew. Show all.";
+		showing.innerHTML = "Showing 20 of "+tableData.length+" matching crew. <a href=\"#\" onclick=\"return findAllCrew();\">Show all</a>.";
 
 	let divTable = document.getElementById('finderResults');
 	divTable.innerHTML = "";
@@ -645,13 +653,20 @@ function updateFinderTable(tableData, tableColumns)
 function showCard(crewId, action = false) {
 	if (!sttat) return;
 
-	let carded = sttat.crew.find(crewman => crewman.id == crewId);
 	let card = document.getElementById('card');
+	if (card.getAttribute('crewId') == crewId)
+	{
+		hideCard();
+		return;
+	}
+
+	let carded = sttat.crew.find(crewman => crewman.id == crewId);
+	card.setAttribute('crewId', crewId);
 	card.className = "rarity-"+carded.max_rarity;
 	document.getElementById('card-name').innerHTML = carded.name;
 	document.getElementById('card-rarity').innerHTML = '★'.repeat(carded.rarity)
 		+'☆'.repeat(carded.max_rarity-carded.rarity);
-	document.getElementById('card-level').innerHTML = carded.immortal ? "Immortal" : "Level "+carded.level;
+	document.getElementById('card-level').innerHTML = carded._immortal ? "Immortal" : "Level "+carded.level;
 	let tbody = document.createElement('tbody');
 	tbody.id = 'card-skills';
 
