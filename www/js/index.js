@@ -759,7 +759,9 @@ function showCard(crewId, action = false) {
 }
 
 function hideCard() {
-	document.getElementById('card').classList.remove('showing');
+	let card = document.getElementById('card');
+	card.classList.remove('showing');
+	card.removeAttribute('crewId');
 	return false;
 }
 
