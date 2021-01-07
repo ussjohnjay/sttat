@@ -143,11 +143,13 @@ function doneAssimilating(imported) {
 
 function errorAssimilating(message) {
 	showFinalStatus(message, false, false);
+	document.getElementById('playertext').classList.remove('hide');
 	document.getElementById('assimilatorStarter').disabled = false;
 }
 
 function resetAssimilator() {
 	document.getElementById('playertext').value = "";
+	document.getElementById('playertext').classList.remove('hide');
 	document.getElementById('localinput').value = "";
 	document.getElementById('assimilatorStarter').disabled = false;
 }
