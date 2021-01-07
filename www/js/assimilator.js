@@ -67,7 +67,7 @@ class Assimilator {
 				this.importShips(player.character);
 				this.importVoyage(player.character);
 				this.importWeekend(player.character);	// Events
-				if (this.voyage) this.defaultVoyageExcludes();
+				this.defaultVoyageExcludes();
 
 				let meta = {
 					'source': source,
@@ -317,6 +317,9 @@ class Assimilator {
 	}
 
 	defaultVoyageExcludes() {
+		if (!this.voyage || !this.weekend)
+			return;
+
 		let excludes = [];
 		for (let i = 0; i < this.crew.length; i++) {
 			// 2: Active on shuttles
@@ -329,7 +332,7 @@ class Assimilator {
 					excludes.push(this.weekend.crew[i].id);
 			}
 		}
-		this.voyage._excludes = excludes;
+		this.voyage._default_excludes = excludes;
 	}
 
 	getTraitId(traitname, bHidden = false) {
