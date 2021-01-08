@@ -168,7 +168,7 @@ function readyVoyagersForm() {
 	let inputSecondary = document.getElementById('in-secondaryskill');
 	inputSecondary.value = voyage.skills.secondary_skill;
 
-	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','transwarp','vulcan','warship'];
+	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','freighter','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','transwarp','vulcan','warship'];
 	let selectST = document.createElement('select');
 	for (let t = 0; t < shipTraits.length; t++) {
 		let option = document.createElement('option');
