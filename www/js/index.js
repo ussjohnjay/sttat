@@ -33,6 +33,7 @@ const SHORT_SKILLS = {
 };
 
 var sttat = false;
+var playerData = "";
 var debugCallback = debug;
 
 function async(aFunction, callback = null) {
@@ -86,27 +87,27 @@ function closeStatus() {
 function onFileInput() {
 	showStatus("Loading file. Please wait...");
 	document.getElementById('assimilatorStarter').disabled = true;
-	async(function () {
-		let fp = document.getElementById('localinput');
-		let fr = new FileReader();
-		fr.onload = function()
-		{
-			document.getElementById('playertext').value = fr.result;
-			startAssimilating('local-input');
-		};
-		fr.readAsText(fp.files[0]);
-	});
+	let fp = document.getElementById('localinput');
+	let fr = new FileReader();
+	fr.onload = function()
+	{
+		playerData = fr.result;
+		let clipped = playerData.substr(0, 500)+" [...]";
+		document.getElementById('playertext').value = clipped;
+		startAssimilating('local-input');
+	};
+	fr.readAsText(fp.files[0]);
 }
 
 function onTextPaste(event) {
 	showStatus("Pasting. Please wait...");
 	document.getElementById('assimilatorStarter').disabled = true;
-	let paste = (event.clipboardData || window.clipboardData).getData('text');
+	let paste = event.clipboardData || window.clipboardData;
 	if (paste) {
-		async(function() {
-			document.getElementById('playertext').value = paste;
-			startAssimilating('pasted-input');
-		});
+		playerData = paste.getData('text');
+		let clipped = playerData.substr(0, 500)+" [...]";
+		document.getElementById('playertext').value = clipped;
+		startAssimilating('pasted-input');
 		event.preventDefault();
 		return false;
 	}
@@ -124,9 +125,9 @@ function startAssimilating(source = 'unknown') {
 		'dispatcherVersion': STTATWEB_VERSION
 	};
 	async(function () {
+		if (playerData == "") playerData = document.getElementById('playertext').value;
 		let assimilator = new Assimilator(config);
-		let playertext = document.getElementById('playertext').value;
-		assimilator.parse(playertext, source);
+		assimilator.parse(playerData, source);
 	});
 }
 
@@ -143,11 +144,13 @@ function doneAssimilating(imported) {
 
 function errorAssimilating(message) {
 	showFinalStatus(message, false, false);
+	playerData = "";
 	document.getElementById('playertext').classList.remove('hide');
 	document.getElementById('assimilatorStarter').disabled = false;
 }
 
 function resetAssimilator() {
+	playerData = "";
 	document.getElementById('playertext').value = "";
 	document.getElementById('playertext').classList.remove('hide');
 	document.getElementById('localinput').value = "";
@@ -168,7 +171,7 @@ function readyVoyagersForm() {
 	let inputSecondary = document.getElementById('in-secondaryskill');
 	inputSecondary.value = voyage.skills.secondary_skill;
 
-	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','freighter','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','transwarp','vulcan','warship'];
+	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','freighter','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','tholian','transwarp','vulcan','warship'];
 	let selectST = document.createElement('select');
 	for (let t = 0; t < shipTraits.length; t++) {
 		let option = document.createElement('option');
