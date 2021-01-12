@@ -317,14 +317,13 @@ class Assimilator {
 	}
 
 	defaultVoyageExcludes() {
-		if (!this.voyage || !this.weekend)
-			return;
+		if (!this.voyage) return;
 
 		let excludes = [];
 		for (let i = 0; i < this.crew.length; i++) {
 			// 2: Active on shuttles
 			// 3: Active on voyagers (can't send more than 1 voyage at a time, so ignore these)
-			if (this.crew[i].active == 2) excludes.push(this.crew[i].id);
+			if (this.crew[i].active_status == 2) excludes.push(this.crew[i].id);
 		}
 		if (this.weekend && this.weekend.exclusive) {
 			for (let i = 0; i < this.weekend.crew.length; i++) {
