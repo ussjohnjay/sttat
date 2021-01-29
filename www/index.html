@@ -94,7 +94,7 @@
 <h4>Options</h4>
 <div class="optionslist">
 <p><input id="in-specialists" type="checkbox" /> <label for="in-specialists">Favor Specialists (Give a slight boost to crew with ENG, SCI, or MED)</label></p>
-<p><input id="in-frozen" type="checkbox" /> <label for="in-frozen">Consider Frozen Crew (Not functional, may never work)</label></p>
+<p><input id="in-frozen" type="checkbox" /> <label for="in-frozen">Consider Frozen Crew</label></p>
 <p><input id="in-immortals" type="checkbox" /> <label for="in-immortals">Exclude Immortal Crew</label></p>
 <p>Max Rarity: <select id="in-maxrarity"><option value="5">Legendary</option><option value="4">Super Rare</option><option value="3">Rare</option><option value="2">Uncommon</option><option value="1">Common</option></select></p>
 </div>
@@ -150,13 +150,18 @@
 <p>You can copy your current player data from this link:</p>
 <p class="importlink"><a href="https://stt.disruptorbeam.com/player" class="external" target="_blank">https://stt.disruptorbeam.com/player</a></p>
 <p>Log in to the page if asked, wait for it to finish loading, then copy and paste everything into this textbox:
-</br><textarea id="playertext" placeholder="Paste your player data here, e.g. {'action':'update','player':{'id': ...}" onpaste="return onTextPaste(event)"></textarea></p>
-<p>Or download the link to your device, then load* it here: <input id="localinput" type="file" onchange="onFileInput()" /></p>
+</br><textarea id="datatext" placeholder="Paste your player data here, e.g. {'action':'update','player':{'id': ...}" onpaste="return onDataPaste(event)"></textarea></p>
+<p>Or download the link to your device, then load* it here: <input id="datainput" type="file" onchange="onDataInput()" /></p>
 <p>Your browser may seem unresponsive after pasting or loading a file. Please wait if asked.</p>
 <div class="optionsbuttons"><button id="assimilatorStarter" onclick="startAssimilating()">Import Rosters</button></div>
 </section><!-- /assimilator -->
 
-<!-- https://datacore.app/structured/crew.csv -->
+<section id="datacore" class="main hide">
+<h3>Import DataCore (Optional)</h3>
+<p>To include statistics about your frozen crew, you'll need to import an additional data file from the third-party site <a href="https://datacore.app/">DataCore</a>:</p>
+<p class="importlink"><a href="https://datacore.app/structured/crew.json" class="external" target="_blank">https://datacore.app/structured/crew.json</a></p>
+<p>Click the link, wait for it to finish loading, then copy and paste everything into the <a href="#assimilator">import textbox above</a>.</p>
+</section><!-- /datacore -->
 
 <section id="advanced" class="main">
 <h3>Advanced Options</h3>
