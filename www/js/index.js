@@ -18,7 +18,7 @@
 
 /*jshint esversion: 6 */
 
-const STTATWEB_VERSION = 0.10;
+const STTATWEB_VERSION = 0.11;
 
 const SKILL_IDS = ['command_skill', 'diplomacy_skill', 'security_skill',
 					'engineering_skill', 'science_skill', 'medicine_skill'];
@@ -33,7 +33,7 @@ const SHORT_SKILLS = {
 };
 
 var sttat = false;
-var playerData = "";
+var sttatInput = "";
 var debugCallback = debug;
 
 function async(aFunction, callback = null) {
@@ -84,77 +84,82 @@ function closeStatus() {
 }
 
 /* Assimilator */
-function onFileInput() {
+function onDataInput() {
 	showStatus("Loading file. Please wait...");
 	document.getElementById('assimilatorStarter').disabled = true;
-	let fp = document.getElementById('localinput');
+	let fp = document.getElementById('datainput');
 	let fr = new FileReader();
 	fr.onload = function()
 	{
-		playerData = fr.result;
-		let clipped = playerData.substr(0, 500)+" [...]";
-		document.getElementById('playertext').value = clipped;
-		startAssimilating('local-input');
+		sttatInput = fr.result;
+		let clipped = sttatInput.substr(0, 500)+" [...]";
+		document.getElementById('datatext').value = clipped;
+		startAssimilating();
 	};
 	fr.readAsText(fp.files[0]);
 }
 
-function onTextPaste(event) {
+function onDataPaste(event) {
 	showStatus("Pasting. Please wait...");
 	document.getElementById('assimilatorStarter').disabled = true;
 	let paste = event.clipboardData || window.clipboardData;
 	if (paste) {
-		playerData = paste.getData('text');
-		let clipped = playerData.substr(0, 500)+" [...]";
-		document.getElementById('playertext').value = clipped;
-		startAssimilating('pasted-input');
+		sttatInput = paste.getData('text');
+		let clipped = sttatInput.substr(0, 500)+" [...]";
+		document.getElementById('datatext').value = clipped;
+		startAssimilating();
 		event.preventDefault();
 		return false;
 	}
 	return true;
 }
 
-function startAssimilating(source = 'unknown') {
-	showStatus("Preparing to import rosters...");
+function startAssimilating() {
+	showStatus("Preparing to import data...");
 	let config = {
-		'successCallback': doneAssimilating,
-		'errorCallback': errorAssimilating,
 		'progressCallback': showStatus,
 		'debugCallback': debugCallback,
 		'dispatcher': 'sttat-web',
 		'dispatcherVersion': STTATWEB_VERSION
 	};
-	async(function () {
-		if (playerData == "") playerData = document.getElementById('playertext').value;
-		let assimilator = new Assimilator(config);
-		assimilator.parse(playerData, source);
-	});
+	if (sttatInput == "") sttatInput = document.getElementById('datatext').value;
+	let assimilator = new Assimilator(config, sttat);
+	assimilator.parse(sttatInput)
+		.then((assimilated) => {
+			sttat = assimilated.data;
+			expertSave();
+			readyCrewFinder();
+			readyVoyagersForm();
+			readyDataCore();
+			if (assimilated.type == 'player') {
+				writeUpdateTime(false);
+				showFinalStatus("Rosters successfully imported!");
+			}
+			else if (assimilated.type == 'datacore') {
+				writeUpdateTime(true);
+				showFinalStatus("DataCore successfully imported!");
+			}
+			document.getElementById('datatext').value = "";
+			document.getElementById('datainput').value = "";
+			document.getElementById('first').scrollIntoView();
+		})
+		.catch((error) => {
+			showFinalStatus(error, false, false);
+		})
+		.finally(() => {
+			sttatInput = "";
+			document.getElementById('assimilatorStarter').disabled = false;
+		});
 }
 
-function doneAssimilating(imported) {
-	sttat = imported;
-	expertSave();
-	writeUpdateTime(false);
-	readyCrewFinder();
-	readyVoyagersForm();
-	resetAssimilator();
-	showFinalStatus();
-	document.getElementById('first').scrollIntoView();
-}
-
-function errorAssimilating(message) {
-	showFinalStatus(message, false, false);
-	playerData = "";
-	document.getElementById('playertext').classList.remove('hide');
-	document.getElementById('assimilatorStarter').disabled = false;
-}
-
-function resetAssimilator() {
-	playerData = "";
-	document.getElementById('playertext').value = "";
-	document.getElementById('playertext').classList.remove('hide');
-	document.getElementById('localinput').value = "";
-	document.getElementById('assimilatorStarter').disabled = false;
+/* DataCore */
+function readyDataCore() {
+	if (!sttat || sttat.meta.datacore_date)
+	{
+		document.getElementById('datacore').classList.add('hide');
+		return;
+	}
+	document.getElementById('datacore').classList.remove('hide');
 }
 
 /* Voyagers */
@@ -171,7 +176,7 @@ function readyVoyagersForm() {
 	let inputSecondary = document.getElementById('in-secondaryskill');
 	inputSecondary.value = voyage.skills.secondary_skill;
 
-	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','ferengi','freighter','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','tholian','transwarp','vulcan','warship','xindi'];
+	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','federation','ferengi','freighter','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','tholian','transwarp','vulcan','warship','war_veteran','xindi'];
 	let selectST = document.createElement('select');
 	for (let t = 0; t < shipTraits.length; t++) {
 		let option = document.createElement('option');
@@ -197,10 +202,30 @@ function readyVoyagersForm() {
 	}
 
 	let excludeCrew = [];
-	if (voyage._default_excludes) {
-		for (let i = 0; i < voyage._default_excludes.length; i++) {
-			let excluded = sttat.crew.find(crewman => crewman.id == voyage._default_excludes[i]);
+	// Use most recent exclude list, if it exists
+	if (voyage._manual_excludes) {
+		for (let i = 0; i < voyage._manual_excludes.length; i++) {
+			let excluded = sttat.crew.find(crewman => crewman.id == voyage._manual_excludes[i]);
 			excludeCrew.push({'id': excluded.id, 'name': excluded.name});
+		}
+	}
+	// Otherwise get excludes by event and active
+	else if (sttat.weekend.exclusive && sttat.weekend.crew) {
+		for (let i = 0; i < sttat.weekend.crew.length; i++) {
+			let excluded = sttat.crew.filter(crewman => crewman.symbol == sttat.weekend.crew[i].symbol);
+			excluded.forEach(crewman => {excludeCrew.push({'id': crewman.id, 'name': crewman.name});});
+		}
+		for (let i = 0; i < sttat.crew.length; i++) {
+			// Active status 	0: available
+			//					2: on shuttle
+			//					3: on voyage (assume available again here)
+			if (sttat.crew[i].active_status == 2) {
+				let excluded = excludeCrew.find(crewman => crewman.id == sttat.crew[i].id);
+				if (!excluded) {
+					excluded = sttat.crew.find(crewman => crewman.id == sttat.crew[i].id);
+					excludeCrew.push({'id': excluded.id, 'name': excluded.name});
+				}
+			}
 		}
 	}
 	if (excludeCrew.length > 0) {
@@ -224,9 +249,9 @@ function readyVoyagersForm() {
 
 	// If prime skills target generalists (CMD, DIP, SEC),
 	//	favor voyagers who would be specialists (have at least 1 of ENG, SCI, MED)
-	if (voyage.skills.primary_skill == "CMD" || voyage.skills.secondary_skill == "CMD"
-		|| voyage.skills.primary_skill == "DIP" || voyage.skills.secondary_skill == "DIP"
-		|| voyage.skills.primary_skill == "SEC" || voyage.skills.secondary_skill == "SEC") {
+	if (voyage.skills.primary_skill == "command_skill" || voyage.skills.secondary_skill == "command_skill"
+		|| voyage.skills.primary_skill == "diplomacy_skill" || voyage.skills.secondary_skill == "diplomacy_skill"
+		|| voyage.skills.primary_skill == "security_skill" || voyage.skills.secondary_skill == "security_skill") {
 		document.getElementById('in-specialists').checked = true;
 	}
 	else {
@@ -240,7 +265,7 @@ function readyVoyagersForm() {
 }
 
 function writeUpdateTime(bFromLocal = false) {
-	let assimilatorTime = new Date(sttat.meta.update_time);
+	let assimilatorTime = new Date(sttat.meta.import_date);
 	let message = "Your rosters are current as of <b>"+assimilatorTime.toLocaleString()+"</b>.";
 	if (bFromLocal)
 		message += " <br/>(<a href=\"#assimilator\">Import Rosters</a> to update)";
@@ -304,9 +329,6 @@ function startVoyagers() {
 		'ships': sttat.ships
 	};
 	let config = {
-		'runAsync': true,
-		'successCallback': doneRecommending,
-		'errorCallback': errorRecommending,
 		'progressCallback': showStatus,
 		'debugCallback': debugCallback
 	};
@@ -316,7 +338,7 @@ function startVoyagers() {
 		'skills': skills,
 		'crew_slots': slots,
 		'ship_trait': document.getElementById('in-shiptrait').value,
-		'_default_excludes': excludeIds /* Include here to remember on next recommendation */
+		'_manual_excludes': excludeIds /* Include here to remember on next recommendation */
 	};
 	let boosts = {
 		'primary': 3.5,
@@ -334,13 +356,18 @@ function startVoyagers() {
 		'calculator': ChewableConverter,
 		'maxAttempts': 10
 	};
-	async(function () {
+	async(function() {
 		let voyagers = new Voyagers(rosters, config);
-		voyagers.assemble(voyage, boosts, options, optimize);
+		voyagers.assemble(voyage, boosts, options, optimize)
+			.then(doneRecommending)
+			.catch((error) => {
+				showFinalStatus(error, false, false);
+				readyVoyagersForm();
+			});
 	});
 }
 
-function doneRecommending(manifest, estimates) {
+function doneRecommending([manifest, estimates]) {
 	// Remember voyage details for next recommendation
 	//	Manifest (i.e. actual recommendations) is not saved
 	sttat.voyage = manifest.voyage;
@@ -392,11 +419,6 @@ function doneRecommending(manifest, estimates) {
 	showFinalStatus();
 }
 
-function errorRecommending(message) {
-	showFinalStatus(message, false, false);
-	readyVoyagersForm();
-}
-
 function getShipIndex(id) {
 	let iShipCount = sttat.ships.length;
 	let index = {};
@@ -434,7 +456,7 @@ function editVoyage() {
 	for (let i = 0; i < 12; i++) {
 		let span = document.getElementById('assigned['+i+']');
 		if (span.classList.contains('strike')) {
-			sttat.voyage._default_excludes.push(span.getAttribute('crewId'));
+			sttat.voyage._manual_excludes.push(span.getAttribute('crewId'));
 		}
 	}
 	readyVoyagersForm();
@@ -563,6 +585,9 @@ function findCrew(bLimit = true) {
 				iScore = iTotalVoyage;
 			else if (iScoreType == 1)
 				iScore = iMatchedVoyage;
+			else if (iScoreType == 2 && skillsRequested.length == 1) {
+				iScore = rMatchedShuttleSkills[0];
+			}
 			else if (iScoreType == 2) {
 				for (let j = 0; j < rMatchedShuttleSkills.length; j++) {
 					if (j == iBestShuttleIndex)
@@ -589,11 +614,14 @@ function findCrew(bLimit = true) {
 			}
 		}
 		if (iScore > 0 && bConsider) {
+			let sName = sttat.crew[i].name;
+			if (sttat.crew[i].copy > 1) sName += " ("+sttat.crew[i].copy+")";
+			if (sttat.crew[i].frozen) sName += " [F]";
 			let sRarity = '★'.repeat(sttat.crew[i].rarity)
 							+'☆'.repeat(sttat.crew[i].max_rarity-sttat.crew[i].rarity);
 			let crewman = {
 				'id': sttat.crew[i].id,
-				'name': sttat.crew[i].name,
+				'name': sName,
 				'rarity': sRarity,
 				'score': Math.floor(iScore)
 			};
@@ -671,7 +699,12 @@ function showCard(crewId, action = false) {
 	document.getElementById('card-name').innerHTML = carded.name;
 	document.getElementById('card-rarity').innerHTML = '★'.repeat(carded.rarity)
 		+'☆'.repeat(carded.max_rarity-carded.rarity);
-	document.getElementById('card-level').innerHTML = carded._immortal ? "Immortal" : "Level "+carded.level;
+	let sLevel = "Level "+carded.level;
+	if (carded.frozen)
+		sLevel = "Immortal [Frozen]";
+	else if (carded.immortal)
+		sLevel = "Immortal";
+	document.getElementById('card-level').innerHTML = sLevel;
 	let tbody = document.createElement('tbody');
 	tbody.id = 'card-skills';
 
@@ -727,10 +760,22 @@ function showCard(crewId, action = false) {
 	document.getElementById('card-voyage').innerHTML = Math.floor(iVoyage);
 
 	let sTraits = "";
-	for (let t = 0; t < carded._variants.length; t++) {
-		let trait = carded._variants[t];
-		if (sTraits != "") sTraits += ", ";
-		sTraits += "<a href=\"#\" onclick=\"return addTraitCriteria('"+trait+"');\">"+trait+"</a>";
+	// Get variant names from traits_hidden
+	let ignore = [
+		'tos','tas','tng','ds9','voy','ent','dsc','pic',
+		'female','male',
+		'artificial_life','nonhuman','organic','species_8472',
+		'admiral','captain','commander','lieutenant_commander','lieutenant','ensign','general','nagus','first_officer',
+		'ageofsail','bridge_crew','evsuit','gauntlet_jackpot','mirror','niners','original',
+		'crew_max_rarity_5','crew_max_rarity_4','crew_max_rarity_3','crew_max_rarity_2','crew_max_rarity_1',
+		'spock_tos' /* 'spock_tos' Spocks also have 'spock' trait so use that and ignore _tos for now */
+	];
+	for (let i = 0; i < carded.traits_hidden.length; i++) {
+		let trait = carded.traits_hidden[i];
+		if (ignore.indexOf(trait) == -1) {
+			if (sTraits != "") sTraits += ", ";
+			sTraits += "<a href=\"#\" onclick=\"return addTraitCriteria('"+trait+"');\">"+trait+"</a>";
+		}
 	}
 	for (let t = 0; t < carded.traits.length; t++) {
 		let trait = carded.traits[t];
@@ -786,6 +831,7 @@ function expertLoad() {
 			writeUpdateTime(true);
 			readyVoyagersForm();
 			readyCrewFinder();
+			readyDataCore();
 			showFinalStatus("Rosters loaded from local storage.");
 		}
 		else {

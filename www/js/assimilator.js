@@ -19,10 +19,79 @@
 /*jshint esversion: 6 */
 
 class Assimilator {
+	constructor(config, sttat = false) {
+		this.config = config;
+		this.sttat = sttat;
+	}
+
+	sendProgress(message) {
+		if (this.config.progressCallback)
+			this.config.progressCallback(message);
+	}
+
+	parse(rawtext) {
+		let self = this;
+		return new Promise(function(resolve, reject) {
+			let json = false;
+
+			if (rawtext == "")
+				reject("There is no data to import.");
+
+			try {
+				json = JSON.parse(rawtext);
+			}
+			catch (e) {
+				reject("The text inputted is not valid data.");
+			}
+
+			// Player Data
+			if (json.player) {
+				let importer = new AssimilatorPlayer(self.config);
+				importer.read(json.player)
+					.then((imported) => {
+						self.sendProgress("Rosters successfully imported!");
+						imported.meta =  {
+							'import_date': Date.now(),
+							'datacore_date': false,
+							'dispatcher': self.config.dispatcher,
+							'dispatcher_version': self.config.dispatcherVersion
+						};
+						resolve({'type': 'player', 'data': imported});
+					})
+					.catch((error) => {
+						reject(error);
+					});
+			}
+			// DataCore Data
+			else if (self.sttat) {
+				if (!self.sttat.meta.datacore_date) {
+					let merger = new AssimilatorDC(self.config);
+					merger.merge(self.sttat, json)
+						.then((merged) => {
+							merged.meta.datacore_date = Date.now();
+							resolve({'type': 'datacore', 'data': merged});
+						})
+						.catch((error) => {
+							reject(error);
+						});
+				}
+				else {
+					reject("DataCore data already found.");
+				}
+			}
+			else {
+				reject("Can't identify data.");
+			}
+
+			json = null;
+		});
+	}
+}
+
+
+class AssimilatorPlayer {
 	constructor(config) {
 		this.config = config;
-
-		this.meta = false;
 
 		// Stripped down, but mostly equivalent versions of player data
 		this.crew = [];			// player.crew
@@ -40,91 +109,54 @@ class Assimilator {
 			this.config.progressCallback(message);
 	}
 
-	parse(rawtext, source) {
-		let assimilated = false;
-		let player = false;
+	read(player) {
+		let self = this;
+		return new Promise(function(resolve, reject) {
+			let assimilated = false;
 
-		let iError = 0;
-		if (rawtext == "") {
-			iError = 1;
-		}
-		else {
-			try {
-				let _playerData = JSON.parse(rawtext);
-				player = _playerData.player;
-			}
-			catch (e) {
-				iError = 2;
-			}
+			if (!player.character)
+				reject("There is no character data available.");
 
-			if (player && !player.character) {
-				iError = 3;
-			}
+			self.importBuffs(player.character);
+			self.importCrew(player.character);
+			self.importShips(player.character);
+			self.importVoyage(player.character);
+			self.importWeekend(player.character);	// Events
 
-			if (iError == 0) {
-				this.importBuffs(player.character);
-				this.importCrew(player.character);
-				this.importShips(player.character);
-				this.importVoyage(player.character);
-				this.importWeekend(player.character);	// Events
-				this.defaultVoyageExcludes();
+			self.stored_immortals = JSON.parse(JSON.stringify(player.character.stored_immortals));
 
-				let meta = {
-					'source': source,
-					'update_time': Date.now(),
-					'dispatcher': this.config.dispatcher,
-					'dispatcher_version': this.config.dispatcherVersion
-				};
-				assimilated = {
-					'meta': meta,
-					'buffs': this.buffs,
-					'crew': this.crew,
-					'crewtraits': this.crewtraits,
-					'ships': this.ships,
-					'voyage': this.voyage,
-					'weekend': this.weekend
-				};
-				this.sendProgress("Rosters successfully imported!");
-			}
-		}
+			player = null;
 
-		player = null;
-
-		if (iError == 0)
-			this.config.successCallback(assimilated);
-		else {
-			let error = "";
-			switch (iError) {
-				case 1:
-					error = "There is no data to import.";
-					break;
-				case 2:
-					error = "The text inputted is not valid player data.";
-					break;
-				case 3:
-					error = "There is no character data available.";
-					break;
-			}
-			this.config.errorCallback(error);
-		}
+			assimilated = {
+				'buffs': self.buffs,
+				'crew': self.crew,
+				'crewtraits': self.crewtraits,
+				'ships': self.ships,
+				'voyage': self.voyage,
+				'weekend': self.weekend,
+				'stored_immortals': self.stored_immortals
+			};
+			self.sendProgress("Rosters successfully imported!");
+			resolve(assimilated);
+		});
 	}
 
 	importBuffs(playerData) {
 		this.sendProgress("Importing buffs...");
 
 		let buffs = {
-			'command': {'core': 0, 'range_min': 0, 'range_max': 0},
-			'diplomacy': {'core': 0, 'range_min': 0, 'range_max': 0},
-			'security': {'core': 0, 'range_min': 0, 'range_max': 0},
-			'engineering': {'core': 0, 'range_min': 0, 'range_max': 0},
-			'science': {'core': 0, 'range_min': 0, 'range_max': 0},
-			'medicine': {'core': 0, 'range_min': 0, 'range_max': 0}
+			'command_skill': {'core': 0, 'range_min': 0, 'range_max': 0},
+			'diplomacy_skill': {'core': 0, 'range_min': 0, 'range_max': 0},
+			'security_skill': {'core': 0, 'range_min': 0, 'range_max': 0},
+			'engineering_skill': {'core': 0, 'range_min': 0, 'range_max': 0},
+			'science_skill': {'core': 0, 'range_min': 0, 'range_max': 0},
+			'medicine_skill': {'core': 0, 'range_min': 0, 'range_max': 0}
 		};
 		if ('all_buffs' in playerData) {
 			let allBuffs = playerData.all_buffs;
 			for (let i = 0; i < allBuffs.length; i++) {
 				let stat = allBuffs[i].stat.split("_");
-				let skillId = stat[0];
+				let skillId = stat[0]+"_"+stat[1];
 				let buffId = stat[2] == "range" ? stat[2]+"_"+stat[3] : stat[2];
 				if (buffId == "core" || buffId == "range_min" || buffId == "range_max")
 					buffs[skillId][buffId] = allBuffs[i].value;
@@ -147,20 +179,6 @@ class Assimilator {
 		for (let i = 0; i < crewData.length; i++) {
 			if (crewData[i].in_buy_back_state) continue;
 
-			for (let trait in crewData[i].traits) {
-				if (crewData[i].traits.hasOwnProperty(trait)) {
-					this.getTraitId(crewData[i].traits[trait]);
-				}
-			}
-			let variants = [];
-			for (let trait in crewData[i].traits_hidden) {
-				if (crewData[i].traits_hidden.hasOwnProperty(trait)) {
-					this.getTraitId(crewData[i].traits_hidden[trait], true);
-					if (this.isVariantTrait(crewData[i].traits_hidden[trait]))
-						variants.push(crewData[i].traits_hidden[trait]);
-				}
-			}
-
 			let iCopy = 1;
 			if (crewData[i].symbol in crewCountsBySymbol)
 				iCopy = ++crewCountsBySymbol[crewData[i].symbol];
@@ -170,8 +188,6 @@ class Assimilator {
 			let bImmortal = crewData[i].level == crewData[i].max_level
 							&& crewData[i].rarity == crewData[i].max_rarity
 							&& crewData[i].equipment_slots.length == crewData[i].equipment.length;
-
-			let bFrozen = false;
 
 			let crewman = {
 				'id': crewId,
@@ -186,10 +202,9 @@ class Assimilator {
 				'traits': crewData[i].traits,
 				'traits_hidden': crewData[i].traits_hidden,
 				'skills': crewData[i].skills,
-				'_variants': variants,
-				'_copy': iCopy,
-				'_immortal': bImmortal,
-				'_frozen': bFrozen
+				'copy': iCopy,
+				'immortal': bImmortal,
+				'frozen': false
 			};
 			crew.push(crewman);
 			crewId++;
@@ -214,7 +229,7 @@ class Assimilator {
 				'max_level': shipData[i].max_level,
 				'antimatter': shipData[i].antimatter,
 				'traits': shipData[i].traits,
-				'_immortal': shipData[i].level == shipData[i].max_level
+				'immortal': shipData[i].level == shipData[i].max_level
 			};
 			ships.push(ship);
 		}
@@ -251,7 +266,10 @@ class Assimilator {
 
 		let eventData = false;
 		if (playerData.events && playerData.events.length > 0) {
-			let activeEvent = playerData.events[0];
+			let activeEvent = playerData.events
+				.filter((ev) => (ev.seconds_to_end > 0))
+				.sort((a, b) => (a.seconds_to_start - b.seconds_to_start))
+			[0];
 			eventData = {
 				'id': activeEvent.id,
 				'name': activeEvent.name,
@@ -271,10 +289,9 @@ class Assimilator {
 					for (let i = 0; i < shuttles.length; i++) {
 						for (let symbol in shuttles[i].crew_bonuses) {
 							if (shuttles[i].crew_bonuses.hasOwnProperty(symbol)) {
-								let bonusCrew = this.crew.find(crewman => crewman.symbol == symbol);
-								if (bonusCrew) {
+								if (!eventCrew.find(crewman => crewman.symbol == symbol)) {
 									let bonusType = shuttles[i].crew_bonuses[symbol]; // 2 or 3 (featured)
-									eventCrew.push({'id': bonusCrew.id, 'type': bonusType});
+									eventCrew.push({'symbol': symbol, 'type': bonusType});
 								}
 							}
 						}
@@ -287,10 +304,9 @@ class Assimilator {
 					eventData.exclusive = true; // Exclude galaxy eligible event crew from voyage recommendations
 					for (let symbol in activeEvent.content.crew_bonuses) {
 						if (activeEvent.content.crew_bonuses.hasOwnProperty(symbol)) {
-							let bonusCrew = this.crew.find(crewman => crewman.symbol == symbol);
-							if (bonusCrew) {
+							if (!eventCrew.find(crewman => crewman.symbol == symbol)) {
 								let bonusType = activeEvent.content.crew_bonuses[symbol]; // 2 or 3 (featured)
-								eventCrew.push({'id': bonusCrew.id, 'type': bonusType});
+								eventCrew.push({'symbol': symbol, 'type': bonusType});
 							}
 						}
 					}
@@ -301,9 +317,8 @@ class Assimilator {
 					eventTypes.push('skirmish');
 					for (let i = 0; i < activeEvent.content.bonus_crew.length; i++) {
 						let symbol = activeEvent.content.bonus_crew[i];
-						let bonusCrew = this.crew.find(crewman => crewman.symbol == symbol);
-						if (bonusCrew) {
-							eventCrew.push({'id': bonusCrew.id, 'type': 3});	// bonusType = 3?
+						if (!eventCrew.find(crewman => crewman.symbol == symbol)) {
+							eventCrew.push({'symbol': symbol, 'type': 3});	// bonusType = 3?
 						}
 					}
 					// Skirmish also uses 'bonus_traits' in activeEvent.content // bonusType = 2?
@@ -315,84 +330,68 @@ class Assimilator {
 		}
 		this.weekend = eventData;
 	}
+}
 
-	defaultVoyageExcludes() {
-		if (!this.voyage) return;
+class AssimilatorDC {
+	constructor(config) {
+		this.config = config;
+	}
 
-		let excludes = [];
-		for (let i = 0; i < this.crew.length; i++) {
-			// 2: Active on shuttles
-			// 3: Active on voyagers (can't send more than 1 voyage at a time, so ignore these)
-			if (this.crew[i].active_status == 2) excludes.push(this.crew[i].id);
-		}
-		if (this.weekend && this.weekend.exclusive) {
-			for (let i = 0; i < this.weekend.crew.length; i++) {
-				if (excludes.indexOf(this.weekend.crew[i].id) == -1)
-					excludes.push(this.weekend.crew[i].id);
+	sendProgress(message) {
+		if (this.config.progressCallback)
+			this.config.progressCallback(message);
+	}
+
+	merge(sttat, allcrew) {
+		let self = this;
+		return new Promise(function(resolve, reject) {
+			let crewlist = JSON.parse(JSON.stringify(sttat.crew));
+			let fakeId = sttat.crew.length;
+			sttat.stored_immortals.forEach(frozen => {
+				let immortal = allcrew.find(ac => ac.archetype_id == frozen.id);
+				if (immortal) {
+					let copies = crewlist.filter(mc => mc.symbol == immortal.symbol);
+					let iCopy = copies.length;
+					immortal.skills = self.applyBuffs(immortal.base_skills, sttat.buffs);
+					for (let i = 0; i < frozen.quantity; i++) {
+						let crewman = {
+							'id': fakeId++,
+							'symbol': immortal.symbol,
+							'name': immortal.name,
+							'short_name': immortal.short_name,
+							'archetype_id': immortal.archetype_id,
+							'level': 100,
+							'rarity': immortal.max_rarity,
+							'max_rarity': immortal.max_rarity,
+							'active_status': 0,
+							'traits': immortal.traits,
+							'traits_hidden': immortal.traits_hidden,
+							'skills': immortal.skills,
+							'copy': ++iCopy,
+							'immortal': true,
+							'frozen': true
+						};
+						crewlist.push(crewman);
+					}
+				}
+			});
+			sttat.crew = crewlist;
+			self.sendProgress("DataCore successfully imported!");
+			resolve(sttat);
+		});
+	}
+
+	applyBuffs(base_skills, buffs) {
+		let buffed = {};
+		for (let skillId in base_skills) {
+			if (base_skills.hasOwnProperty(skillId)) {
+				buffed[skillId] = {
+					'core': Math.round(base_skills[skillId].core*(1+buffs[skillId].core)),
+					'range_min': Math.round(base_skills[skillId].range_min*(1+buffs[skillId].range_min)),
+					'range_max': Math.round(base_skills[skillId].range_max*(1+buffs[skillId].range_max))
+				};
 			}
 		}
-		this.voyage._default_excludes = excludes;
-	}
-
-	getTraitId(traitname, bHidden = false) {
-		let traitId = -1;
-		let existing = this.crewtraits.find(trait => trait.name == traitname);
-		if (existing) {
-			traitId = existing.id;
-		}
-		else {
-			traitId = this.crewtraits.length;
-			this.crewtraits.push({
-				'id': traitId,
-				'name': traitname,
-				'hidden': bHidden
-			});
-		}
-		return traitId;
-	}
-
-	isVariantTrait(traitname) {
-		let bVariant = true;
-		switch (traitname)
-		{
-			case "tos":
-			case "tas":
-			case "tng":
-			case "ds9":
-			case "voy":
-			case "ent":
-			case "dsc":
-			case "pic":
-			case "nonhuman":
-			case "artificial_life":
-			case "organic":
-			case "species_8472":
-			case "female":
-			case "male":
-			case "admiral":
-			case "captain":
-			case "commander":
-			case "lieutenant_commander":
-			case "lieutenant":
-			case "ensign":
-			case "general":
-			case "nagus":
-			case "first_officer":
-			case "bridge_crew":
-			case "ageofsail":
-			case "evsuit":
-			case "mirror":
-			case "niners":
-			case "original":
-			case "gauntlet_jackpot":
-			case "crew_max_rarity_5":
-			case "crew_max_rarity_4":
-			case "crew_max_rarity_3":
-			case "crew_max_rarity_2":
-			case "crew_max_rarity_1":
-				bVariant = false;
-				break;
-		}
-		return bVariant;
+		return buffed;
 	}
 }

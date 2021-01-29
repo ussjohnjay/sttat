@@ -30,330 +30,106 @@ class Voyagers {
 	}
 
 	sendProgress(message) {
+		if (this.config.debugCallback)
+			this.config.debugCallback(message);
 		if (this.config.progressCallback)
 			this.config.progressCallback(message);
 	}
 
+	// idenfity best ship by ship_trait
+	// prime roster by primary_ and secondary_scores
+	// do 10 attempts:
+	//	get scores of primed roster, adjusted by boosts
+	//	do 12 slots:
+	//		assign crew with best score to lineup
+	//	adjust boosts to balance lineup
+	// return best lineup after 10 attempts
 	assemble(voyage, boosts, options, optimize) {
-		function voyageAsync(aFirst, aSecond) {
-			if (self.config.runAsync) {
-				setTimeout(function() {
-					aFirst();
-					aSecond();
-				}, 0);
-			}
-			else {
-				aFirst();
-				aSecond();
-			}
-		}
-
-		function assembleNextLineup() {
-			// 1 all: open ideal slot
-			// 2A ideal:
-			//	2A1 canNotDisplace: can current assignee move without displacing an ideal?
-			//	2A2 canDisplace: can current assignee move displacing exactly 1 ideal?
-			// 2B non-ideal:
-			// 	2B1 any open viable slot
-			// 	2B2 canNotDisplace: can current assignee move without displacing an ideal?
-			// 3 all: skip volunteer
-			function tryToAssign(assignments, seeker, bIdealOnly, bCanDisplace, tested = []) {
-				let sDebugPrefix = "";
-				for (let i = 0; i < tested.length; i++) {
-					sDebugPrefix += "-";
-				}
-				sDebugPrefix += " ";
-
-				// Identify state of all viable slots
-				let open_ideal = [], open_viable = [], occupied_ideal = [], occupied_viable = [];
-				for (let i = 0; i < 12; i++) {
-					if (!seeker.viable_slots[i]) continue;
-					if (assignments[i].id >= 0) {
-						occupied_viable.push(i);
-						if (seeker.trait_slots[i]) occupied_ideal.push(i);
-					}
-					else {
-						open_viable.push(i);
-						if (seeker.trait_slots[i]) open_ideal.push(i);
-					}
-				}
-
-				// 1) Seat in ideal open slot
-				if (open_ideal.length > 0) {
-					doAssign(assignments, seeker, open_ideal[0], sDebugPrefix);
-					return true;
-				}
-
-				// 2A)
-				if (bIdealOnly) {
-					// 2A1) Seat in occupied slot only if everyone moves around willingly
-					let idealsTested = JSON.parse(JSON.stringify(tested));
-					for (let i = 0; i < occupied_ideal.length; i++) {
-						let slot = occupied_ideal[i];
-						// Ignore slots we've already inquired about by this seeker and descendant seekers
-						if (idealsTested.indexOf(slot) >= 0) continue;
-						idealsTested.push(slot);
-						let assignee = assignments[slot];
-						if (debug) _debugQueue += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") would be ideal in slot " + slot  + ". Is " + assignee.name + " (" + assignee.score + ") willing and able to move?";
-						if (tryToAssign(assignments, assignee, true, false, idealsTested)) {
-							doAssign(assignments, seeker, slot, sDebugPrefix);
-							return true;
-						}
-					}
-					// 2A2) Seat in occupied slot only if exactly 1 other is able to move from ideal slot
-					idealsTested = JSON.parse(JSON.stringify(tested));
-					for (let i = 0; i < occupied_ideal.length; i++) {
-						let slot = occupied_ideal[i];
-						// Ignore slots we've already inquired about by this seeker and descendant seekers
-						if (idealsTested.indexOf(slot) >= 0) continue;
-						idealsTested.push(slot);
-						let assignee = assignments[slot];
-						if (debug) _debugQueue += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") insists on being in slot " + slot  + ". Is " + assignee.name + " (" + assignee.score + ") able to move?";
-						if (tryToAssign(assignments, assignee, false, true, idealsTested)) {
-							doAssign(assignments, seeker, slot, sDebugPrefix);
-							return true;
-						}
-					}
-				}
-
-				// 2B)
-				if (!bIdealOnly) {
-					// 2B1) Seat in open slot
-					if (open_viable.length > 0) {
-						doAssign(assignments, seeker, open_viable[0], sDebugPrefix);
-						return true;
-					}
-
-					// 2B2) Seat in occupied slot only if everyone moves around willingly
-					let viablesTested = JSON.parse(JSON.stringify(tested));
-					for (let i = 0; i < occupied_viable.length; i++) {
-						let slot = occupied_viable[i];
-						// Ignore slots we've already inquired about by this seeker and descendant seekers
-						if (viablesTested.indexOf(slot) >= 0) continue;
-						viablesTested.push(slot);
-						let assignee = assignments[slot];
-						if (!seeker.trait_slots[slot] && assignee.trait_slots[slot] && !bCanDisplace)
-							continue;
-						if (debug) _debugQueue += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") is inquiring about slot " + slot  + ". Is " + assignee.name + " (" + assignee.score + ") willing and able to move?";
-						if (tryToAssign(assignments, assignee, false, false, viablesTested)) {
-							doAssign(assignments, seeker, slot, sDebugPrefix);
-							return true;
-						}
-					}
-				}
-
-				// 3) Can't seat
-				if (debug) _debugQueue += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") will not take a new assignment";
-				return false;
-			}
-
-			function doAssign(assignments, seeker, iAssignment, sPrefix = "") {
-				let sIdeal = seeker.trait_slots[iAssignment] ? "ideal " : "";
-				let sOpen = assignments[iAssignment].id == -1 ? "open ": "";
-				if (debug) _debugQueue += "\n" + sPrefix + seeker.name + " (" + seeker.score + ") accepts " + sIdeal + "assignment in " + sOpen + "slot " + iAssignment;
-				assignments[iAssignment] = seeker;
-				assignments[iAssignment].assignment = iAssignment;
-				assignments[iAssignment].denied_slots = [];
-				assignments[iAssignment].isIdeal = seeker.trait_slots[iAssignment];
-			}
-
-			let sTestMessage = iAttemptsAllowed > 1 ? " ("+(iAttempts+1)+"/"+iAttemptsAllowed+")" : "";
-			self.sendProgress("Testing lineups"+sTestMessage+". Please wait...");
-
-			const trait_boost = 200;
-
-			let boostedScores = [];
-			for (let i = 0; i < primedRoster.length; i++) {
-				let baseScore = primedRoster[i].primary_score * boosts.primary
-								+ primedRoster[i].secondary_score * boosts.secondary
-								+ primedRoster[i].other_score * boosts.other;
-				let bestScore = baseScore + trait_boost;
-				let baseSlots = [], bestSlots = [];
-				for (let j = 0; j < 12; j++) {
-					if (!primedRoster[i].viable_slots[j]) continue;
-					baseSlots.push(j);
-					if (primedRoster[i].trait_slots[j]) bestSlots.push(j);
-				}
-				if (bestSlots.length > 0)
-					boostedScores.push({ score: bestScore, id: primedRoster[i].id, isIdeal: true });
-				if (baseSlots.length > bestSlots.length)
-					boostedScores.push({ score: baseScore, id: primedRoster[i].id, isIdeal: false });
-			}
-			boostedScores.sort((a, b) => b.score - a.score);
-
-			let assignments = Array.from({length:12},()=> ({'id': -1}));
-			let iAssigned = 0;
-
-			let skipped = [];
-
-			_debugQueue = "";
-
-			while (boostedScores.length > 0 && iAssigned < 12) {
-				let testScore = boostedScores.shift();
-
-				// Volunteer is already assignments, list other matching slots as alts
-				let repeat = assignments.find(assignee => assignee.id == testScore.id);
-				if (repeat) {
-					if (debug) _debugQueue += "\n~ " + repeat.name + " (" + testScore.score + ") is already assignments to slot " + repeat.assignment + " (" + repeat.score + ") ~";
-					continue;
-				}
-
-				let volunteer = primedRoster.find(primed => primed.id == testScore.id);
-				volunteer.score = testScore.score;
-				volunteer.denied_slots = [];
-
-				if (tryToAssign(assignments, volunteer, testScore.isIdeal, testScore.isIdeal)) {
-					iAssigned++;
-				}
-				else {
-					let bRepeatSkip = skipped.indexOf(volunteer.id) >= 0;
-					skipped.push(volunteer.id);
-					if (bRepeatSkip || !testScore.isIdeal)
-						if (debug) _debugQueue += "\n!! Skipping " + volunteer.name + " (" + volunteer.score + ") forever !!";
-					else
-						if (debug) _debugQueue += "\n! Skipping " + volunteer.name + " (" + volunteer.score + ") for now !";
-				}
-			}
-
-			if (iAssigned == 12) {
-				let manifest = {
-					'voyage': voyage,
-					'ship': bestShip,
-					'lineup': new VoyagersLineup(assignments)
-				};
-				let estimates = optimize ? new VoyagersEstimates(manifest, optimize.calculator) : false;
-				attempts.push({'manifest': manifest, 'estimates': estimates});
-
-				if (estimates && estimates.time > iBestTime) {
-					iBestTime = estimates.time;
-					iBestAttempt = iAttempts;
-				}
-				else if (!estimates) {
-					iBestAttempt = 0;
-				}
-
-				if (debug) {
-					if (estimates) debug(iAttempts+") Estimate: "+estimates.print()+" (99%: "+estimates.printResult('saferResult')+")");
-					let sLineup = "";
-					for (let i = 0; i < assignments.length; i++) {
-						if (sLineup != "") sLineup += ", ";
-						sLineup += assignments[i].name + " (" + assignments[i].score.toFixed(1) + ")";
-					}
-					debug("Lineup: "+sLineup);
-				}
-			}
-			else {
-				attempts.push(false);
-			}
-		}
-
-		// Chances of hazards by skill are 35%, 25%, 10%, 10%, 10%, 10%
-		//  We'll adjust prime targets based on total strength of roster and initial boosts,
-		//	 and then adjust boosts based on how close to targets a tested lineup hits
-		function adjustNextBoosts() {
-			let bBalanced = false;
-			if (attempts[iAttempts]) {
-				let score = attempts[iAttempts].manifest.lineup.score;
-				let skills = attempts[iAttempts].manifest.lineup.skills;
-
-				if (debug) {
-					debug("Boosts: "+boosts.primary.toFixed(2)+"+"+boosts.secondary.toFixed(2)+"+"+boosts.other.toFixed(2));
-					debug("Scores: "+skills.command_skill+", "+skills.diplomacy_skill+", "
-							+skills.security_skill+", "+skills.engineering_skill+", "
-							+skills.science_skill+", "+skills.medicine_skill);
-				}
-
-				// Reweight boosts to balance skill scores
-				let newBoosts = {
-					'primary': boosts.primary,
-					'secondary': boosts.secondary,
-					'other': boosts.other
-				};
-
-				// Finetune by smaller increments as attempts increase
-				const FINETUNE_RATIO = 1/(iAttempts+1);
-
-				let baseTarget = score/10;
-				let primeTarget = 4000;
-				if (baseTarget >= 6000)
-					primeTarget = 12000; // 12 hours
-				else if (baseTarget >= 4000)
-					primeTarget = 10000; // 10 hours
-				else if (baseTarget >= 2000)
-					primeTarget = 8000; // 8 hours
-				else if (baseTarget >= 1000)
-					primeTarget = 6000; // 6 hours
-
-				if (debug) debug("Avg: "+baseTarget.toFixed(1)+", Prime Target: "+primeTarget);
-
-				let primaryScore = skills[voyage.skills.primary_skill];
-				let primaryDeviation = (primaryScore-primeTarget)/baseTarget;
-				let primaryAdjustment = primaryDeviation.toFixed(1)*FINETUNE_RATIO*-1;
-				newBoosts.primary += primaryAdjustment;
-
-				let secondaryScore = skills[voyage.skills.secondary_skill];
-				let secondaryDeviation = (secondaryScore-primeTarget)/baseTarget;
-				let secondaryAdjustment = secondaryDeviation.toFixed(1)*FINETUNE_RATIO*-1;
-				newBoosts.secondary += secondaryAdjustment;
-
-				bBalanced = primaryAdjustment == 0 && secondaryAdjustment == 0;
-				boosts = newBoosts;
-			}
-
-			if (iAttempts+1 >= iAttemptsAllowed || bBalanced) {
-				finalizeAssembly();
-				return;
-			}
-
-			iAttempts++;
-			voyageAsync(assembleNextLineup, adjustNextBoosts);
-		}
-
-		function finalizeAssembly() {
-			if (iBestAttempt >= 0) {
-				let attempt = attempts[iBestAttempt];
-				self.sendProgress("Voyage lineup assembled!");
-				if (debug) {
-					if (attempt.estimates) debug("Best run: " + iBestAttempt + " (" + attempt.estimates.print() + ")");
-					if (iAttempts+1 == 1) debug(_debugQueue);
-				}
-				self.config.successCallback(attempt.manifest, attempt.estimates);
-			}
-			else {
-				self.config.errorCallback("You don't have enough crew for this voyage!");
-			}
-		}
-
-		// idenfity best ship by ship_trait
-		// get primed roster by primary_ and secondary_scores
-		// do 10 attempts:
-		//	get scores of primed roster, adjusted by boosts
-		//	do 12 slots:
-		//		assign crew with best score to lineup
-		//	adjust boosts to balance lineup
-		// return best lineup after 10 attempts
-
 		let self = this;
 
 		let debug = this.config.debugCallback;
-		let _debugQueue = "";
 
 		this.sendProgress("Studying ships...");
 		let bestShip = this.getBestShip(voyage.ship_trait);
+		if (debug) debug("Best ship: "+bestShip.name+" ("+bestShip.antimatter+" AM)");
 		this.sendProgress("Studying crew...");
 		let primedRoster = this.getPrimedRoster(voyage, options);
+		if (debug) debug("Considering "+primedRoster.length+" crew for this voyage");
 
 		let attempts = [];
 		let iAttempts = 0, iBestTime = 0, iBestAttempt = -1;
-		let iAttemptsAllowed = 1;
+		let iAttemptsAllowed = optimize ? optimize.maxAttempts : 1;
 
-		if (optimize) {
-			iAttemptsAllowed = optimize.maxAttempts;
-			voyageAsync(assembleNextLineup, adjustNextBoosts);
-		}
-		else {
-			voyageAsync(assembleNextLineup, finalizeAssembly);
-		}
+		return new Promise(function(resolve, reject) {
+			let sequence = Promise.resolve();
+			for (let i = 0; i < iAttemptsAllowed; i++) {
+				sequence = sequence.then(() => {
+					let sTestMessage = iAttemptsAllowed > 1 ? " ("+(i+1)+"/"+iAttemptsAllowed+")" : "";
+					self.sendProgress("Testing lineups"+sTestMessage+". Please wait...");
+					return new Promise(function(resolve, reject) {
+						setTimeout(function() {
+							let lineup = self.getBoostedLineup(primedRoster, boosts);
+							if (lineup)
+								resolve(lineup);
+							else
+								reject("You don't have enough crew for this voyage!");
+						}, 0);
+					});
+				})
+				.then((lineup) => {
+					let manifest = {
+						'voyage': voyage,
+						'ship': bestShip,
+						'lineup': lineup
+					};
+					let estimates = optimize ? new VoyagersEstimates(manifest, optimize.calculator) : false;
+
+					if (debug) {
+						if (estimates) debug((iAttempts+1)+") Estimate: "+estimates.print()+" (99%: "+estimates.printResult('saferResult')+")");
+						let sLineup = "";
+						for (let i = 0; i < lineup.crew.length; i++) {
+							if (sLineup != "") sLineup += ", ";
+							sLineup += lineup.crew[i].name + " (" + lineup.crew[i].score.toFixed(1) + ")";
+						}
+						debug("Lineup: "+sLineup);
+						debug("Boosts: "+boosts.primary.toFixed(2)+"+"+boosts.secondary.toFixed(2)+"+"+boosts.other.toFixed(2));
+						debug("Scores: "+lineup.skills.command_skill+", "+lineup.skills.diplomacy_skill+", "
+								+lineup.skills.security_skill+", "+lineup.skills.engineering_skill+", "
+								+lineup.skills.science_skill+", "+lineup.skills.medicine_skill);
+					}
+
+					attempts.push({'manifest': manifest, 'estimates': estimates});
+
+					if (estimates && estimates.time > iBestTime) {
+						iBestTime = estimates.time;
+						iBestAttempt = iAttempts;
+					}
+
+					if (iAttempts+1 < iAttemptsAllowed) {
+						let primaryScore = lineup.skills[voyage.skills.primary_skill];
+						let secondaryScore = lineup.skills[voyage.skills.secondary_skill];
+						let finetuneRatio = 1/(iAttempts+1); // Finetune by smaller increments as attempts increase
+						boosts = self.adjustBoosts(boosts, lineup.score, primaryScore, secondaryScore, finetuneRatio);
+					}
+
+					iAttempts++;
+
+					// We're done, send the best lineup back as [manifest, estimates]
+					if (!boosts || iAttempts == iAttemptsAllowed) {
+						let attempt = attempts[iBestAttempt];
+						self.sendProgress("Voyage lineup assembled!");
+						if (debug) {
+							if (attempt.estimates) debug("Best run: " + (iBestAttempt+1) + " (" + attempt.estimates.print() + ")");
+							//if (iAttempts+1 == 1) debug(assemblyLog);
+						}
+						resolve([attempt.manifest, attempt.estimates]);
+					}
+				});
+			}
+			sequence.catch((error) => {
+				reject(error);
+			});
+		});
 	}
 
 	getBestShip(shiptrait) {
@@ -393,7 +169,7 @@ class Voyagers {
 			if (options) {
 				if (options.excludes && options.excludes.indexOf(this.crew[i].id) >= 0)
 					bExclude = true;
-				if (options.considerFrozen && this.crew[i].frozen)
+				if (!options.considerFrozen && this.crew[i].frozen)
 					bExclude = true;
 				if (options.excludeImmortals && this.crew[i].immortal)
 					bExclude = true;
@@ -447,6 +223,213 @@ class Voyagers {
 		}
 		return primedRoster;
 	}
+
+	// 1 all: open ideal slot
+	// 2A ideal:
+	//	2A1 canNotDisplace: can current assignee move without displacing an ideal?
+	//	2A2 canDisplace: can current assignee move displacing exactly 1 ideal?
+	// 2B non-ideal:
+	// 	2B1 any open viable slot
+	// 	2B2 canNotDisplace: can current assignee move without displacing an ideal?
+	// 3 all: skip volunteer
+	getBoostedLineup(primedRoster, boosts) {
+		function tryToAssign(assignments, seeker, bIdealOnly, bCanDisplace, tested = []) {
+			let sDebugPrefix = "";
+			for (let i = 0; i < tested.length; i++) {
+				sDebugPrefix += "-";
+			}
+			sDebugPrefix += " ";
+
+			// Identify state of all viable slots
+			let open_ideal = [], open_viable = [], occupied_ideal = [], occupied_viable = [];
+			for (let i = 0; i < 12; i++) {
+				if (!seeker.viable_slots[i]) continue;
+				if (assignments[i].id >= 0) {
+					occupied_viable.push(i);
+					if (seeker.trait_slots[i]) occupied_ideal.push(i);
+				}
+				else {
+					open_viable.push(i);
+					if (seeker.trait_slots[i]) open_ideal.push(i);
+				}
+			}
+
+			// 1) Seat in ideal open slot
+			if (open_ideal.length > 0) {
+				doAssign(assignments, seeker, open_ideal[0], sDebugPrefix);
+				return true;
+			}
+
+			// 2A)
+			if (bIdealOnly) {
+				// 2A1) Seat in occupied slot only if everyone moves around willingly
+				let idealsTested = JSON.parse(JSON.stringify(tested));
+				for (let i = 0; i < occupied_ideal.length; i++) {
+					let slot = occupied_ideal[i];
+					// Ignore slots we've already inquired about by this seeker and descendant seekers
+					if (idealsTested.indexOf(slot) >= 0) continue;
+					idealsTested.push(slot);
+					let assignee = assignments[slot];
+					assemblyLog += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") would be ideal in slot " + slot  + ". Is " + assignee.name + " (" + assignee.score + ") willing and able to move?";
+					if (tryToAssign(assignments, assignee, true, false, idealsTested)) {
+						doAssign(assignments, seeker, slot, sDebugPrefix);
+						return true;
+					}
+				}
+				// 2A2) Seat in occupied slot only if exactly 1 other is able to move from ideal slot
+				idealsTested = JSON.parse(JSON.stringify(tested));
+				for (let i = 0; i < occupied_ideal.length; i++) {
+					let slot = occupied_ideal[i];
+					// Ignore slots we've already inquired about by this seeker and descendant seekers
+					if (idealsTested.indexOf(slot) >= 0) continue;
+					idealsTested.push(slot);
+					let assignee = assignments[slot];
+					assemblyLog += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") insists on being in slot " + slot  + ". Is " + assignee.name + " (" + assignee.score + ") able to move?";
+					if (tryToAssign(assignments, assignee, false, true, idealsTested)) {
+						doAssign(assignments, seeker, slot, sDebugPrefix);
+						return true;
+					}
+				}
+			}
+
+			// 2B)
+			if (!bIdealOnly) {
+				// 2B1) Seat in open slot
+				if (open_viable.length > 0) {
+					doAssign(assignments, seeker, open_viable[0], sDebugPrefix);
+					return true;
+				}
+
+				// 2B2) Seat in occupied slot only if everyone moves around willingly
+				let viablesTested = JSON.parse(JSON.stringify(tested));
+				for (let i = 0; i < occupied_viable.length; i++) {
+					let slot = occupied_viable[i];
+					// Ignore slots we've already inquired about by this seeker and descendant seekers
+					if (viablesTested.indexOf(slot) >= 0) continue;
+					viablesTested.push(slot);
+					let assignee = assignments[slot];
+					if (!seeker.trait_slots[slot] && assignee.trait_slots[slot] && !bCanDisplace)
+						continue;
+					assemblyLog += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") is inquiring about slot " + slot  + ". Is " + assignee.name + " (" + assignee.score + ") willing and able to move?";
+					if (tryToAssign(assignments, assignee, false, false, viablesTested)) {
+						doAssign(assignments, seeker, slot, sDebugPrefix);
+						return true;
+					}
+				}
+			}
+
+			// 3) Can't seat
+			assemblyLog += "\n" + sDebugPrefix + seeker.name + " (" + seeker.score + ") will not take a new assignment";
+			return false;
+		}
+
+		function doAssign(assignments, seeker, iAssignment, sPrefix = "") {
+			let sIdeal = seeker.trait_slots[iAssignment] ? "ideal " : "";
+			let sOpen = assignments[iAssignment].id == -1 ? "open ": "";
+			assemblyLog += "\n" + sPrefix + seeker.name + " (" + seeker.score + ") accepts " + sIdeal + "assignment in " + sOpen + "slot " + iAssignment;
+			assignments[iAssignment] = seeker;
+			assignments[iAssignment].assignment = iAssignment;
+			assignments[iAssignment].denied_slots = [];
+			assignments[iAssignment].isIdeal = seeker.trait_slots[iAssignment];
+		}
+
+		let assemblyLog = "";
+
+		const trait_boost = 200;
+
+		let boostedScores = [];
+		for (let i = 0; i < primedRoster.length; i++) {
+			let baseScore = primedRoster[i].primary_score * boosts.primary
+							+ primedRoster[i].secondary_score * boosts.secondary
+							+ primedRoster[i].other_score * boosts.other;
+			let bestScore = baseScore + trait_boost;
+			let baseSlots = [], bestSlots = [];
+			for (let j = 0; j < 12; j++) {
+				if (!primedRoster[i].viable_slots[j]) continue;
+				baseSlots.push(j);
+				if (primedRoster[i].trait_slots[j]) bestSlots.push(j);
+			}
+			if (bestSlots.length > 0)
+				boostedScores.push({ score: bestScore, id: primedRoster[i].id, isIdeal: true });
+			if (baseSlots.length > bestSlots.length)
+				boostedScores.push({ score: baseScore, id: primedRoster[i].id, isIdeal: false });
+		}
+		boostedScores.sort((a, b) => b.score - a.score);
+
+		let assignments = Array.from({length:12},()=> ({'id': -1}));
+		let iAssigned = 0;
+
+		let skipped = [];
+
+		while (boostedScores.length > 0 && iAssigned < 12) {
+			let testScore = boostedScores.shift();
+
+			// Volunteer is already assignments, list other matching slots as alts
+			let repeat = assignments.find(assignee => assignee.id == testScore.id);
+			if (repeat) {
+				assemblyLog += "\n~ " + repeat.name + " (" + testScore.score + ") is already assignments to slot " + repeat.assignment + " (" + repeat.score + ") ~";
+				continue;
+			}
+
+			let volunteer = primedRoster.find(primed => primed.id == testScore.id);
+			volunteer.score = testScore.score;
+			volunteer.denied_slots = [];
+
+			if (tryToAssign(assignments, volunteer, testScore.isIdeal, testScore.isIdeal)) {
+				iAssigned++;
+			}
+			else {
+				let bRepeatSkip = skipped.indexOf(volunteer.id) >= 0;
+				skipped.push(volunteer.id);
+				if (bRepeatSkip || !testScore.isIdeal)
+					assemblyLog += "\n!! Skipping " + volunteer.name + " (" + volunteer.score + ") forever !!";
+				else
+					assemblyLog += "\n! Skipping " + volunteer.name + " (" + volunteer.score + ") for now !";
+			}
+		}
+
+		if (iAssigned == 12)
+			return new VoyagersLineup(assignments);
+		
+		return false;
+	}
+
+	// Reweight boosts to balance skill scores
+	// Chances of hazards by skill are 35%, 25%, 10%, 10%, 10%, 10%
+	//  We'll adjust prime targets based on total strength of roster and initial boosts,
+	//	 and then adjust boosts based on how close to targets a lineup scores
+	adjustBoosts(boosts, totalScore, primaryScore, secondaryScore, finetuneRatio) {
+		let newBoosts = {
+			'primary': boosts.primary,
+			'secondary': boosts.secondary,
+			'other': boosts.other
+		};
+
+		let baseTarget = totalScore/10;
+		let primeTarget = 4000;
+		if (baseTarget >= 6000)
+			primeTarget = 12000; // 12 hours
+		else if (baseTarget >= 4000)
+			primeTarget = 10000; // 10 hours
+		else if (baseTarget >= 2000)
+			primeTarget = 8000; // 8 hours
+		else if (baseTarget >= 1000)
+			primeTarget = 6000; // 6 hours
+
+		let primaryDeviation = (primaryScore-primeTarget)/baseTarget;
+		let primaryAdjustment = primaryDeviation.toFixed(1)*finetuneRatio*-1;
+		newBoosts.primary += primaryAdjustment;
+
+		let secondaryDeviation = (secondaryScore-primeTarget)/baseTarget;
+		let secondaryAdjustment = secondaryDeviation.toFixed(1)*finetuneRatio*-1;
+		newBoosts.secondary += secondaryAdjustment;
+
+		// No adjustments made, so stop trying to optimize
+		if (primaryAdjustment == 0 && secondaryAdjustment == 0)
+			return false;
+
+		return newBoosts;
+	}
 }
 
 class VoyagersLineup {
@@ -466,7 +449,8 @@ class VoyagersLineup {
 		for (let i = 0; i < assignments.length; i++) {
 			crew.push({
 				'id': assignments[i].id,
-				'name': assignments[i].name
+				'name': assignments[i].name,
+				'score': assignments[i].score
 			});
 			traitsMatched.push(assignments[i].isIdeal ? 1 : 0);
 			if (assignments[i].isIdeal) iBonusTraits++;
@@ -550,8 +534,7 @@ class VoyagersEstimates {
 		if (!time) time = this.time;
 		let hours = Math.floor(time);
 		let minutes = Math.floor((time-hours)*60);
-		if (minutes < 10) minutes = "0"+minutes;
-		return hours + ":" + minutes;
+		return hours+"h " +minutes+"m";
 	}
 
 	printResult(result) {
@@ -566,7 +549,7 @@ class VoyagersEstimates {
 			sChances = "99% worst case: "+this.printResult('saferResult');
 		if (this._estimates.dilChance && this._estimates.lastDil) {
 			if (sChances != "") sChances += ", ";
-			sChances += this._estimates.dilChance+"% chance to reach "+this._estimates.lastDil+":00";
+			sChances += this._estimates.dilChance+"% chance to reach "+this._estimates.lastDil+"h dilemma";
 		}
 		return sChances;
 	}
