@@ -40,7 +40,7 @@ a.external
 }
 
 select,
-input[type=textbox]
+input[type=text]
 {
 	padding: 3px;
 }
@@ -369,6 +369,20 @@ div.optionsbuttons
 	border: 1px solid #4e95f4;
 	background: #b8d1f3;
 	color: black;
+}
+
+#filterAccepted
+{
+	width: 100%;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 5px;
+}
+
+#filter-bit label
+{
+	margin-right: .5em;
+	font-size: .9em;
 }
 
 #voyageExcludeList
