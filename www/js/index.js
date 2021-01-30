@@ -34,6 +34,7 @@ const SHORT_SKILLS = {
 
 var sttat = false;
 var sttatInput = "";
+var sttatSession = false;
 var debugCallback = debug;
 
 function async(aFunction, callback = null) {
@@ -155,11 +156,43 @@ function startAssimilating() {
 /* DataCore */
 function readyDataCore() {
 	if (!sttat || sttat.meta.datacore_date)
-	{
 		document.getElementById('datacore').classList.add('hide');
-		return;
+	else
+		document.getElementById('datacore').classList.remove('hide');
+	if (!sttat || !sttat.meta.datacore_date)
+		document.getElementById('optionrow-frozen').classList.add('hide');
+	else
+		document.getElementById('optionrow-frozen').classList.remove('hide');
+}
+
+/* Aggregates */
+function aggregateTraits() {
+	let crewtraits = [];
+	for (let i = 0; i < sttat.crew.length; i++) {
+		['traits', 'traits_hidden'].forEach(traitlist => {
+			for (let t = 0; t < sttat.crew[i][traitlist].length; t++) {
+				let traitname = sttat.crew[i][traitlist][t];
+				let existing = crewtraits.find(trait => trait.name == traitname);
+				if (!existing) {
+					crewtraits.push({
+						'id': crewtraits.length,
+						'name': traitname,
+						'hidden': traitlist == 'traits_hidden' ? true : false
+					});
+				}
+			}
+		});
 	}
-	document.getElementById('datacore').classList.remove('hide');
+	sttatSession = {
+		'crewtraits': crewtraits
+	}
+	crewtraits.sort((a, b) => a.name.localeCompare(b.name));
+	let dlTraits = document.getElementById('traits');
+	crewtraits.forEach(trait => {
+		let option = document.createElement('option');
+		option.setAttribute('value', trait.name);
+		dlTraits.appendChild(option);
+	});
 }
 
 /* Voyagers */
@@ -466,23 +499,64 @@ function editVoyage() {
 /* Crew Finder */
 function readyCrewFinder() {
 	if (!sttat) return;
+	if (!sttat.aggregates) aggregateTraits();
 	findCrew();
 	document.getElementById('finder').classList.remove('hide');
 }
 
-function addTraitCriteria(trait) {
-	let filter = document.getElementById('filter-trait');
-	filter.value = trait;
+function onTraitInput(event) {
+	if (event.inputType == 'insertReplacementText') {
+		if (document.getElementById('filterAccepted').childNodes.length > 0) {
+			if (canAddAsTraitCriteria()) {
+				addTraitCriteria();
+				return;
+			}
+		}
+	}
 	findCrew();
-	document.getElementById('finder').scrollIntoView();
-	hideCard();
+}
+
+function canAddAsTraitCriteria() {
+	let trait = document.getElementById('filter-trait').value;
+	if (trait == "") return false;
+
+	let a = document.getElementById('filterAccepted').getElementsByTagName('a');
+	for (let t = 0; t < a.length; t++) {
+		if (a[t].innerHTML == trait) return false;
+	}
+
+	let matching = sttatSession.crewtraits.filter(existing => existing.name == trait);
+	if (matching.length != 1) return false;
+
+	return true;
+}
+
+function addTraitCriteria() {
+	let input = document.getElementById('filter-trait');
+	let trait = input.value;
+	let a = document.createElement('a');
+	a.href = "#";
+	a.innerHTML = trait;
+	a.setAttribute('onclick', 'return clearTraitCriteria(this);');
+	a.setAttribute('title', 'Click to remove trait from search');
+	document.getElementById('filterAccepted').appendChild(a);
+	input.value = "";
+	input.focus();
+	findCrew();
 	return false;
 }
 
-function clearTraitCriteria() {
-	document.getElementById('filter-trait').value = "";
-	document.getElementById('filter-clear').classList.add('hide');
+function clearTraitCriteria(a) {
+	document.getElementById('filterAccepted').removeChild(a);
 	findCrew();
+	return false;
+}
+
+function setTraitInput(trait) {
+	document.getElementById('filter-trait').value = trait;
+	findCrew();
+	document.getElementById('finder').scrollIntoView();
+	hideCard();
 	return false;
 }
 
@@ -518,18 +592,35 @@ function findCrew(bLimit = true) {
 	document.getElementById('max-skills').innerHTML = iMaxSkills;
 
 	let traits = [];
-	let sTraits = document.getElementById('filter-trait').value;
-	if (sTraits != "") {
-		let rTraits = sTraits.split(/[,|&]+/);
-		for (let t = 0; t < rTraits.length; t++) {
-			let re = new RegExp("^"+rTraits[t].trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]+/g, ''), 'i');
-			let found = sttat.crewtraits.filter(trait => re.test(trait.name));
-			for (let f = 0; f < found.length; f++) {
-				traits.push(found[f].name);
-			}
-			if (found.length == 0) traits.push('');
+	let bFindAllTraits = false;
+	let accepted = document.getElementById('filterAccepted')
+					.getElementsByTagName('a');
+	if (accepted.length > 0) {
+		for (let t = 0; t < accepted.length; t++) {
+			traits.push(accepted[t].innerHTML);
 		}
+		document.getElementById('filterOptionLabel').classList.remove('hide');
+		document.getElementById('filterOptionList').classList.remove('hide');
+		bFindAllTraits = document.getElementById('filter-all').checked;
+	}
+	else {
+		document.getElementById('filterOptionLabel').classList.add('hide');
+		document.getElementById('filterOptionList').classList.add('hide');
+	}
+	let sTraits = document.getElementById('filter-trait').value;
+	if (sTraits != "" && sTraits.trim() != "") {
+		let re = new RegExp("^"+sTraits.trim().replace(/\s+/g, '_').replace(/[^A-Za-z0-9_]+/g, ''), 'i');
+		let found = sttatSession.crewtraits.filter(trait => re.test(trait.name));
+		for (let f = 0; f < found.length; f++) {
+			traits.push(found[f].name);
+		}
+		if (found.length == 0) traits.push('');
 		document.getElementById('filter-clear').classList.remove('hide');
+		if (canAddAsTraitCriteria()) document.getElementById('filter-add').classList.remove('hide');
+	}
+	else {
+		document.getElementById('filter-add').classList.add('hide');
+		document.getElementById('filter-clear').classList.add('hide');
 	}
 
 	let div = document.getElementById('skillSelect');
@@ -602,16 +693,17 @@ function findCrew(bLimit = true) {
 		let bConsider = true;
 		if (traits.length > 0) {
 			bConsider = false;
+			let iMatchedTraits = 0;
 			for (let t = 0; t < traits.length; t++) {
-				if (sttat.crew[i].traits.indexOf(traits[t]) >= 0) {
-					bConsider = true;
-					break;
-				}
-				else if (sttat.crew[i].traits_hidden.indexOf(traits[t]) >= 0) {
-					bConsider = true;
-					break;
-				}
+				if (sttat.crew[i].traits.indexOf(traits[t]) >= 0)
+					iMatchedTraits++;
+				else if (sttat.crew[i].traits_hidden.indexOf(traits[t]) >= 0)
+					iMatchedTraits++;
 			}
+			if (bFindAllTraits)
+				bConsider = iMatchedTraits == traits.length;
+			else
+				bConsider = iMatchedTraits > 0;
 		}
 		if (iScore > 0 && bConsider) {
 			let sName = sttat.crew[i].name;
@@ -774,13 +866,13 @@ function showCard(crewId, action = false) {
 		let trait = carded.traits_hidden[i];
 		if (ignore.indexOf(trait) == -1) {
 			if (sTraits != "") sTraits += ", ";
-			sTraits += "<a href=\"#\" onclick=\"return addTraitCriteria('"+trait+"');\">"+trait+"</a>";
+			sTraits += "<a href=\"#\" onclick=\"return setTraitInput('"+trait+"');\">"+trait+"</a>";
 		}
 	}
 	for (let t = 0; t < carded.traits.length; t++) {
 		let trait = carded.traits[t];
 		if (sTraits != "") sTraits += ", ";
-		sTraits += "<a href=\"#\" onclick=\"return addTraitCriteria('"+trait+"');\">"+trait+"</a>";
+		sTraits += "<a href=\"#\" onclick=\"return setTraitInput('"+trait+"');\">"+trait+"</a>";
 	}
 	document.getElementById('card-traits').innerHTML = sTraits;
 
