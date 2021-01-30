@@ -38,7 +38,9 @@
 <option value="3">Gauntlet - Selected Skill</option>
 </select></div>
 <div class="label">Filter by trait:</div>
-<div><input id="filter-trait" type="textbox" class="textinput" onkeyup="findCrew()" /> <span id="filter-clear" class="hide"><a href="#" onclick="return clearTraitCriteria();" class="clearlink">Clear</a></span></div>
+<div><input id="filter-trait" type="text" class="textinput" oninput="onTraitInput(event)" list="traits" /><datalist id="traits"></datalist> <span id="filter-add" class="hide"><a href="#" onclick="return addTraitCriteria();" class="clearlink">Add Trait</a></span> <span id="filter-clear" class="hide"><a href="#" onclick="return setTraitInput('');" class="clearlink">Clear</a></span></div>
+<div id="filterOptionLabel" class="label hide">Match <input name="filter-bit" id="filter-any" type="radio" value="any" onchange="findCrew()" /> <label for="filter-any">any</label> <input name="filter-bit" id="filter-all" type="radio" value="all" onchange="findCrew()" /> <label for="filter-all">all</label>:</div>
+<div id="filterOptionList" class="hide"><div id="filterAccepted"></div></div>
 <div class="label">Select up to <span id="max-skills">3</span> skills:</div>
 <div id="skillSelect">
 <a id="select-command" href="#" onclick="return toggleSkill('command');">CMD</a>
@@ -94,7 +96,7 @@
 <h4>Options</h4>
 <div class="optionslist">
 <p><input id="in-specialists" type="checkbox" /> <label for="in-specialists">Favor Specialists (Give a slight boost to crew with ENG, SCI, or MED)</label></p>
-<p><input id="in-frozen" type="checkbox" /> <label for="in-frozen">Consider Frozen Crew</label></p>
+<p id="optionrow-frozen" class="hide"><input id="in-frozen" type="checkbox" /> <label for="in-frozen">Consider Frozen Crew</label></p>
 <p><input id="in-immortals" type="checkbox" /> <label for="in-immortals">Exclude Immortal Crew</label></p>
 <p>Max Rarity: <select id="in-maxrarity"><option value="5">Legendary</option><option value="4">Super Rare</option><option value="3">Rare</option><option value="2">Uncommon</option><option value="1">Common</option></select></p>
 </div>
