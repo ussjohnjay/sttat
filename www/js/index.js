@@ -844,12 +844,16 @@ function showCard(crewId, action = false) {
 			let tdAverage = document.createElement('td');
 			tdAverage.className = 'score';
 			tdAverage.innerHTML = scores[score].average;
-			tr.append(tdSkill, tdCore, tdRange, tdAverage);
+			let tdRank = document.createElement('td');
+			tdRank.className = 'rank';
+			tdRank.innerHTML = getVoyageRank(scores[score].average, skillId);
+			tr.append(tdSkill, tdCore, tdRange, tdAverage, tdRank);
 			tbody.appendChild(tr);
 		}
 	}
 
 	document.getElementById('card-voyage').innerHTML = Math.floor(iVoyage);
+	document.getElementById('card-voyagerank').innerHTML = getVoyageRank(iVoyage);	
 
 	let sTraits = "";
 	// Get variant names from traits_hidden
@@ -898,6 +902,32 @@ function showCard(crewId, action = false) {
 	document.getElementById('card-skills').replaceWith(tbody);
 
 	card.classList.add('showing');
+}
+
+function getVoyageRank(score, field = '') {
+	let filtered = sttat.crew.filter(crewman => {
+		if (field == '') {
+			let iVoyage = 0;
+			for (let iSkill = 0; iSkill < SKILL_IDS.length; iSkill++) {
+				let skillId = SKILL_IDS[iSkill];
+				if (!crewman.skills[skillId]) continue;
+				let core = crewman.skills[skillId].core;
+				let average = crewman.skills[skillId].core
+								+ crewman.skills[skillId].range_min
+								+ (crewman.skills[skillId].range_max-crewman.skills[skillId].range_min)/2;
+				iVoyage += average;
+			}
+			return iVoyage > score;
+		}
+		else {
+			if (!crewman.skills[field]) return false;
+			let average = crewman.skills[field].core
+							+ crewman.skills[field].range_min
+							+ (crewman.skills[field].range_max-crewman.skills[field].range_min)/2;
+			return average > score;
+		}
+	});
+	return filtered.length+1;
 }
 
 function hideCard() {
