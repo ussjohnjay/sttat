@@ -254,8 +254,7 @@ class AssimilatorPlayer {
 				'secondary_skill': description.skills.secondary_skill
 			},
 			'ship_trait': description.ship_trait,
-			'crew_slots': slots,
-			'_default_excludes': []
+			'crew_slots': slots
 		};
 
 		this.voyage = voyageData;
