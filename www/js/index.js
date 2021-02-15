@@ -18,7 +18,7 @@
 
 /*jshint esversion: 6 */
 
-const STTATWEB_VERSION = 0.11;
+const STTATWEB_VERSION = 0.12;
 
 const SKILL_IDS = ['command_skill', 'diplomacy_skill', 'security_skill',
 					'engineering_skill', 'science_skill', 'medicine_skill'];
@@ -33,8 +33,7 @@ const SHORT_SKILLS = {
 };
 
 var sttat = false;
-var sttatInput = "";
-var sttatSession = false;
+var sttatSession = {};
 var debugCallback = debug;
 
 function async(aFunction, callback = null) {
@@ -92,8 +91,8 @@ function onDataInput() {
 	let fr = new FileReader();
 	fr.onload = function()
 	{
-		sttatInput = fr.result;
-		let clipped = sttatInput.substr(0, 500)+" [...]";
+		sttatSession.input = fr.result;
+		let clipped = sttatSession.input.substr(0, 500)+" [...]";
 		document.getElementById('datatext').value = clipped;
 		startAssimilating();
 	};
@@ -105,8 +104,8 @@ function onDataPaste(event) {
 	document.getElementById('assimilatorStarter').disabled = true;
 	let paste = event.clipboardData || window.clipboardData;
 	if (paste) {
-		sttatInput = paste.getData('text');
-		let clipped = sttatInput.substr(0, 500)+" [...]";
+		sttatSession.input = paste.getData('text');
+		let clipped = sttatSession.input.substr(0, 500)+" [...]";
 		document.getElementById('datatext').value = clipped;
 		startAssimilating();
 		event.preventDefault();
@@ -123,9 +122,9 @@ function startAssimilating() {
 		'dispatcher': 'sttat-web',
 		'dispatcherVersion': STTATWEB_VERSION
 	};
-	if (sttatInput == "") sttatInput = document.getElementById('datatext').value;
+	if (sttatSession.input == "") sttatSession.input = document.getElementById('datatext').value;
 	let assimilator = new Assimilator(config, sttat);
-	assimilator.parse(sttatInput)
+	assimilator.parse(sttatSession.input)
 		.then((assimilated) => {
 			sttat = assimilated.data;
 			expertSave();
@@ -148,21 +147,25 @@ function startAssimilating() {
 			showFinalStatus(error, false, false);
 		})
 		.finally(() => {
-			sttatInput = "";
+			sttatSession.input = "";
 			document.getElementById('assimilatorStarter').disabled = false;
 		});
 }
 
 /* DataCore */
 function readyDataCore() {
-	if (!sttat || sttat.meta.datacore_date)
+	if (!sttat || sttat.datacore)
 		document.getElementById('datacore').classList.add('hide');
 	else
 		document.getElementById('datacore').classList.remove('hide');
-	if (!sttat || !sttat.meta.datacore_date)
+	if (!sttat || !sttat.datacore) {
 		document.getElementById('optionrow-frozen').classList.add('hide');
-	else
+		document.getElementById('retriever').classList.add('hide');
+	}
+	else {
 		document.getElementById('optionrow-frozen').classList.remove('hide');
+		document.getElementById('retriever').classList.remove('hide');
+	}
 }
 
 /* Aggregates */
@@ -183,9 +186,7 @@ function aggregateTraits() {
 			}
 		});
 	}
-	sttatSession = {
-		'crewtraits': crewtraits
-	}
+	sttatSession.crewtraits = crewtraits;
 	crewtraits.sort((a, b) => a.name.localeCompare(b.name));
 	let dlTraits = document.getElementById('traits');
 	crewtraits.forEach(trait => {
@@ -853,7 +854,7 @@ function showCard(crewId, action = false) {
 	}
 
 	document.getElementById('card-voyage').innerHTML = Math.floor(iVoyage);
-	document.getElementById('card-voyagerank').innerHTML = getVoyageRank(iVoyage);	
+	document.getElementById('card-voyagerank').innerHTML = getVoyageRank(iVoyage);
 
 	let sTraits = "";
 	// Get variant names from traits_hidden
@@ -934,6 +935,231 @@ function hideCard() {
 	let card = document.getElementById('card');
 	card.classList.remove('showing');
 	card.removeAttribute('crewId');
+	return false;
+}
+
+/* Retriever */
+function onRetrieveInput(event) {
+	let dlAllCrew = document.getElementById('allcrew');
+	if (dlAllCrew.childNodes.length == 0) {
+		sttat.datacore.sort((a, b) => a.name.localeCompare(b.name));
+		sttat.datacore.forEach(crewman => {
+			let option = document.createElement('option');
+			option.setAttribute('value', crewman.name);
+			dlAllCrew.appendChild(option);
+		});
+	}
+	retrieveCrew();
+}
+
+function retrieveCrew() {
+	function addPolestar(type, typeId) {
+		let a = document.createElement('a');
+		a.id = 'exclude_'+typeId;
+		a.innerHTML = typeId;
+		a.setAttribute('type', 'trait');
+		a.setAttribute('typeId', typeId);
+		a.setAttribute('title', 'Click to toggle polestar');
+		a.setAttribute('href', '#');
+		a.setAttribute('onclick', 'return togglePolestar(\''+typeId+'\');');
+		document.getElementById('polestarSelect').appendChild(a);
+	}
+
+	let sCrewName = document.getElementById('retrieve-name').value;
+	let wanted = sttat.datacore.find(crew => crew.name.toLowerCase() == sCrewName.toLowerCase());
+	if (!wanted) return;
+
+	document.getElementById('polestarSelect').innerHTML = "";
+	for (let t = 0; t < wanted.traits.length; t++) {
+		addPolestar('trait', wanted.traits[t]);
+	}
+	addPolestar('rarity', 'crew_max_rarity_'+wanted.max_rarity);
+	for (let skill in wanted.skills) {
+		addPolestar('skill', skill);
+	}
+
+	sttatSession.retriever = getAllPolestarCounts(wanted.traits, wanted.max_rarity, wanted.skills);
+	optimizePolestars();
+}
+
+function optimizePolestars() {
+	let excludePolestars = [];
+	let polestarList = document.getElementById('polestarSelect');
+	let polestarItems = polestarList.getElementsByTagName("a");
+	for (let i = 0; i < polestarItems.length; i++) {
+		if (polestarItems[i].classList.contains('strike')) {
+			excludePolestars.push(polestarItems[i].getAttribute('typeId'));
+		}
+	}
+
+	let polestarCounts = sttatSession.retriever.slice();
+
+	// Find optimal polestars, i.e. combinations with best chance of retrieving this crew
+	polestarCounts.sort((a, b) => {
+		if (a.count == b.count)
+			return a.polestars.length - b.polestars.length;
+		return a.count - b.count;
+	});
+	let optimized = [], iBestCount = 10, iBestTraitCount = 4;
+	for (let i = 0; i < polestarCounts.length; i++) {
+		let testcount = polestarCounts[i];
+
+		// We stop looking for optimals if testcount is:
+		//	1) worse than current best count (lower is better)
+		if (testcount.count > iBestCount)
+			break;
+		//	or 2) trait count is 4 and current best trait count is less than 4
+		if (testcount.polestars.length == 4 && iBestTraitCount < 4)
+			break;
+		
+		// Ignore if combination contains any excluded polestars
+		let bHasExclude = false;
+		excludePolestars.forEach(exclude => {
+			if (testcount.polestars.indexOf(exclude) >= 0)
+				bHasExclude = true;
+		});
+		if (bHasExclude) continue;
+
+		if (testcount.count < iBestCount)
+			iBestCount = testcount.count;
+		if (testcount.polestars.length < iBestTraitCount)
+			iBestTraitCount = testcount.polestars.length;
+
+		// Ignore supersets of an already optimal subset
+		let bIsSuperset = false;
+		for (let j = 0; j < optimized.length; j++) {
+			if (testcount.polestars.length <= optimized[j].polestars.length) continue;
+			bIsSuperset = true;
+			optimized[j].polestars.forEach(polestar => {
+				bIsSuperset = bIsSuperset && testcount.polestars.indexOf(polestar) >= 0;
+			});
+			if (bIsSuperset) break;
+		}
+		if (bIsSuperset) continue;
+
+		optimized.push({
+			'polestars': testcount.polestars,
+			'chance': (1/testcount.count*100).toFixed()
+		});
+	}
+
+	let tableColumns = [{'id': 'chance', 'title': 'Chance', 'class': 'score'},
+					{'id': 'polestars', 'title': 'Optimal Polestars', 'class': ''}];
+	updateRetrieverTable(optimized, tableColumns, true);
+}
+
+function togglePolestar(typeId) {
+	document.getElementById('exclude_'+typeId).classList.toggle('strike');
+	optimizePolestars();
+	return false;
+}
+
+function updateRetrieverTable(tableData, tableColumns, bLimit) {
+	let iLimit = Math.min(tableData.length, 20);
+	if (!bLimit) iLimit = tableData.length;
+
+	let table = document.createElement('table');
+	let tHead = document.createElement('thead');
+	let trHead = document.createElement('tr');
+	for (let i = 0; i < tableColumns.length; i++)
+	{
+		let thHead = document.createElement('th');
+		thHead.innerHTML = tableColumns[i].title;
+		trHead.appendChild(thHead);
+	}
+	tHead.appendChild(trHead);
+	table.appendChild(tHead);
+
+	let tBody = document.createElement('tbody');
+	for (let i = 0; i < iLimit; i++)
+	{
+    let tr = document.createElement('tr');
+		tr.className = 'clickable';
+		for (let j = 0; j < tableColumns.length; j++)
+		{
+			let td = document.createElement('td');
+			td.innerHTML = tableData[i][tableColumns[j].id];
+			td.className = tableColumns[j].class;
+			tr.appendChild(td);
+		}
+		tBody.appendChild(tr);
+	}
+	table.appendChild(tBody);
+	table.className = "databox";
+
+	let showing = document.createElement('div');
+	showing.className = "optionspostnote";
+	/*
+	if (tableData.length <= iLimit)
+		showing.innerHTML = "Showing all "+tableData.length+" combinations.";
+	else
+		showing.innerHTML = "Showing 20 of "+tableData.length+" combinations. <a href=\"#\" onclick=\"return retrieveAll();\">Show all</a>.";
+	*/
+
+	let divTable = document.getElementById('retrieverResults');
+	divTable.innerHTML = "";
+	divTable.appendChild(table);
+	divTable.appendChild(showing);
+}
+
+function getAllPolestarCounts(traits, max_rarity, skills) {
+	let polestars = traits.slice();
+	polestars.push('crew_max_rarity_'+max_rarity);
+	for (let skill in skills) {
+		polestars.push(skill);
+	}
+	let counts = [];
+	let f = function(prepoles, traits) {
+		for (let t = 0; t < traits.length; t++) {
+			const newpoles = prepoles.slice();
+			newpoles.push(traits[t]);
+			if (newpoles.length <= 4) {
+				counts.push({
+					'polestars': newpoles,
+					'count': 0,
+					'matches': []
+				});
+			}
+			f(newpoles, traits.slice(t+1));
+		}
+	}
+	f([], polestars);
+	for (let i = 0; i < sttat.datacore.length; i++) {
+		if (!sttat.datacore[i].in_portal) continue;
+		let traitsInCommon = [];
+		for (let t = 0; t < traits.length; t++) {
+			if (sttat.datacore[i].traits.indexOf(traits[t]) >= 0)
+				traitsInCommon.push(traits[t]);
+		}
+		if (traitsInCommon.length > 0) {
+			if (sttat.datacore[i].max_rarity == max_rarity)
+				traitsInCommon.push('crew_max_rarity_'+max_rarity);
+			for (let skill in sttat.datacore[i].skills) {
+				if (skill in skills) traitsInCommon.push(skill);
+			}
+			counts.forEach(count => {
+				if (traitsInCommon.length >= count.polestars.length) {
+					let bMatching = true;
+					count.polestars.forEach(polestar => {
+						bMatching = bMatching && traitsInCommon.indexOf(polestar) >= 0;
+					});
+					if (bMatching) {
+						count.count++;
+						count.matches.push(sttat.datacore[i].symbol);
+					}
+				}
+			});
+		}
+	}
+	return counts;
+}
+
+function resetPolestars() {
+	let polestarList = document.getElementById('polestarSelect');
+	let polestarItems = polestarList.getElementsByTagName("a");
+	for (let i = 0; i < polestarItems.length; i++) {
+		polestarItems[i].classList.remove('strike');
+	}
 	return false;
 }
 

@@ -341,9 +341,10 @@ class AssimilatorDC {
 			this.config.progressCallback(message);
 	}
 
-	merge(sttat, allcrew) {
+	merge(sttat, datacore) {
 		let self = this;
 		return new Promise(function(resolve, reject) {
+			let allcrew = self.streamline(datacore, sttat.buffs);  
 			let crewlist = JSON.parse(JSON.stringify(sttat.crew));
 			let fakeId = sttat.crew.length;
 			sttat.stored_immortals.forEach(frozen => {
@@ -351,7 +352,6 @@ class AssimilatorDC {
 				if (immortal) {
 					let copies = crewlist.filter(mc => mc.symbol == immortal.symbol);
 					let iCopy = copies.length;
-					immortal.skills = self.applyBuffs(immortal.base_skills, sttat.buffs);
 					for (let i = 0; i < frozen.quantity; i++) {
 						let crewman = {
 							'id': fakeId++,
@@ -375,10 +375,30 @@ class AssimilatorDC {
 				}
 			});
 			sttat.crew = crewlist;
+			sttat.datacore = allcrew;
 			self.sendProgress("DataCore successfully imported!");
 			resolve(sttat);
 		});
 	}
+	
+	streamline(datacore, buffs) {
+		let allcrew = [];
+		datacore.forEach(dc => {
+			let crewman = {
+				'symbol': dc.symbol,
+				'name': dc.name,
+				'short_name': dc.short_name,
+				'archetype_id': dc.archetype_id,
+				'max_rarity': dc.max_rarity,
+				'traits': dc.traits.slice(),
+				'traits_hidden': dc.traits_hidden.slice(),
+				'skills': this.applyBuffs(dc.base_skills, buffs),
+				'in_portal': dc.in_portal
+			};
+			allcrew.push(crewman);
+		});
+		return allcrew;
+	}	
 
 	applyBuffs(base_skills, buffs) {
 		let buffed = {};
