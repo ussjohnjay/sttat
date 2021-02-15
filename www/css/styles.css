@@ -439,6 +439,44 @@ div.optionsbuttons
 	font-weight: bold;
 }
 
+/* Retriever */
+#polestarSelect
+{
+	margin: .5em 0;
+	padding: 6px;
+	border: #4e95f4 1px solid;
+	background: #dae5f4;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+}
+#polestarSelect a
+{
+	display: inline-block;
+	padding: 3px 6px;
+	border: 1px solid #4e95f4;
+	background: #b8d1f3;
+	color: green;
+	text-decoration: none;
+}
+#polestarSelect a:hover,
+#polestarSelect a:active
+{
+	background: #d0d0d0;
+	color: maroon;
+	border: 1px solid maroon;
+}
+#polestarSelect a.strike {
+	text-decoration: line-through;
+	color: maroon;
+	border: 1px solid maroon;
+}
+#polestarSelect:empty:before
+{
+	content: "(Select a crew to see polestars)";
+	color: gray;
+}
+
 /* Misc */
 .hide
 {
