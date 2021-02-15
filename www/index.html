@@ -5,7 +5,7 @@
 <meta http-equiv="content-type" content="text/html; charset=utf-8" />
 <meta name="viewport" content="width=device-width" />
 
-<title>Star Trek Timelines Crew Finder</title>
+<title>Star Trek Timelines Assistant</title>
 
 <link rel="stylesheet" type="text/css" media="screen" href="css/styles.css" />
 
@@ -17,7 +17,7 @@
 
 <body onload="expertLoad()">
 
-<h1>Star Trek Timelines Crew Finder</h1>
+<h1>Star Trek Timelines Assistant</h1>
 
 <div id="container">
 
@@ -27,7 +27,7 @@
 </section>
 
 <section id="finder" class="main hide">
-<h3>Crew Finder</h3>
+<h3>My Crew</h3>
 <section class="sub">
 <div class="optionsgrid">
 <div class="label">Score:</div>
@@ -147,12 +147,29 @@
 
 </section><!-- /voyagers -->
 
+<section id="retriever" class="main hide">
+<h3>Optimal Crew Retrieval</h3>
+<section class="sub">
+<div class="optionsgrid">
+<div class="label">Find a crew by name:</div>
+<div><input id="retrieve-name" type="text" class="textinput" oninput="onRetrieveInput(event)" list="allcrew" /><datalist id="allcrew"></datalist></div>
+</div>
+</section>
+<section id="excludePolestars" class="sub">
+<h4>Available Polestars</h4>
+<p>Tap a polestar to exclude it from consideration.</p>
+<div id="polestarSelect"></div>
+<div class="optionspostnote"><a href="#" onclick="return resetPolestars();" class="clearlink">Reset</a></div>
+</section><!-- /excludePolestars -->
+<section id="retrieverResults" class="sub"></section>
+</section>
+
 <section id="assimilator" class="main">
 <h3>Import Rosters</h3>
 <p>You can copy your current player data from this link:</p>
 <p class="importlink"><a href="https://stt.disruptorbeam.com/player" class="external" target="_blank">https://stt.disruptorbeam.com/player</a></p>
 <p>Log in to the page if asked, wait for it to finish loading, then copy and paste everything into this textbox:
-</br><textarea id="datatext" placeholder="Paste your player data here, e.g. {'action':'update','player':{'id': ...}" onpaste="return onDataPaste(event)"></textarea></p>
+<br/><textarea id="datatext" placeholder="Paste your player data here, e.g. {'action':'update','player':{'id': ...}" onpaste="return onDataPaste(event)"></textarea></p>
 <p>Or download the link to your device, then load* it here: <input id="datainput" type="file" onchange="onDataInput()" /></p>
 <p>Your browser may seem unresponsive after pasting or loading a file. Please wait if asked.</p>
 <div class="optionsbuttons"><button id="assimilatorStarter" onclick="startAssimilating()">Import Rosters</button></div>
@@ -160,7 +177,7 @@
 
 <section id="datacore" class="main hide">
 <h3>Import DataCore (Optional)</h3>
-<p>To include statistics about your frozen crew, you'll need to import an additional data file from the third-party site <a href="https://datacore.app/">DataCore</a>:</p>
+<p>To include statistics about your frozen crew and others who are not on your active roster, you'll need to import an additional data file from the third-party site <a href="https://datacore.app/">DataCore</a>:</p>
 <p class="importlink"><a href="https://datacore.app/structured/crew.json" class="external" target="_blank">https://datacore.app/structured/crew.json</a></p>
 <p>Click the link, wait for it to finish loading, then copy and paste everything into the <a href="#assimilator">import textbox above</a>.</p>
 </section><!-- /datacore -->
