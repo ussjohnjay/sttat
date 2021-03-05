@@ -2,7 +2,7 @@
 //  https://codepen.io/somnivore/pen/Nabyzw
 
 function ChewableEstimator(config) {
-  // passed parameters
+  // passed required parameters
   var ps = config.ps;
   var ss = config.ss;
   var o1 = config.others[0];
@@ -11,8 +11,13 @@ function ChewableEstimator(config) {
   var o4 = config.others[3];
   var startAm = config.startAm;
 
-  // returned output
-  var output = {};
+  // passed optional parameters
+  var prof = config.prof ? config.prof : 20;
+
+  var skillVariance
+
+  // returned estimate
+  var estimate = {};
 
   // output
   var numExtends = 2;
@@ -40,7 +45,6 @@ function ChewableEstimator(config) {
   var hazPerHour = hazPerCycle*cyclesPerHour-dilemmasPerHour;
   var hazSkillPerHour = 1260;
   var hazSkillPerTick = hazSkillPerHour/ticksPerHour; // 7
-  var hazSkillVariance = 0.15; // overwritten from input
   var hazAmPass = 5;
   var hazAmFail = 30;
   var activityAmPerHour = activityPerCycle*cyclesPerHour*amPerActivity;
@@ -74,7 +78,7 @@ function ChewableEstimator(config) {
 
   //sizeUi();
 
-  hazSkillVariance = 20/100; // ParseInt(document.getElementById("prof").value)/100;
+  var hazSkillVariance = prof/100;
   var skills = [ps,ss,o1,o2,o3,o4];
 
   var elapsedHazSkill = elapsedHours*hazSkillPerHour;
@@ -183,7 +187,7 @@ function ChewableEstimator(config) {
     } // foreach tick
   } // foreach sim
 
-  var estimates = [];
+  var refills = [];
 
   // calculate and display results
   for (var extend = 0; extend <= numExtends; ++extend) {
@@ -215,7 +219,7 @@ function ChewableEstimator(config) {
       dilChance = 100;
     }
 
-	var estimate = {
+	var refill = {
 		'result': voyTime,
 		'safeResult': safeTime,
 		'saferResult': saferTime,
@@ -223,7 +227,7 @@ function ChewableEstimator(config) {
 		'dilChance': dilChance,
 		'refillCostResult': extend > 0 ? Math.ceil(resultsRefillCostTotal[extend]/numSims) : 0
 	}
-	estimates.push(estimate);
+	refills.push(refill);
 
     //test.text = maxSkill*(1+hazSkillVariance)/hazSkillPerHour
     // the threshold here is just a guess
@@ -235,13 +239,13 @@ function ChewableEstimator(config) {
     }
   } // foreach extend
 
-  output['estimates'] = estimates;
+  estimate['refills'] = refills;
 
   // calculate 20hr results
-  output['20hrdil'] = Math.ceil(results20hrCostTotal/num20hourSims);
-  output['20hrrefills'] = Math.round(results20hrRefillsTotal/num20hourSims);
+  estimate['20hrdil'] = Math.ceil(results20hrCostTotal/num20hourSims);
+  estimate['20hrrefills'] = Math.round(results20hrRefillsTotal/num20hourSims);
 
-  return output;
+  return estimate;
 }
 
 function randomInt(min, max)

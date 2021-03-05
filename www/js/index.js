@@ -128,6 +128,7 @@ function startAssimilating() {
 		.then((assimilated) => {
 			sttat = assimilated.data;
 			expertSave();
+			sttatSession.voyageExcludeIds = false;
 			readyCrewFinder();
 			readyVoyagersForm();
 			readyDataCore();
@@ -210,7 +211,7 @@ function readyVoyagersForm() {
 	let inputSecondary = document.getElementById('in-secondaryskill');
 	inputSecondary.value = voyage.skills.secondary_skill;
 
-	let shipTraits = ['','andorian','borg','breen','cardassian','emp','explorer','federation','ferengi','freighter','hologram','klingon','romulan','ruthless','scout','spore_drive','terran','tholian','transwarp','vulcan','warship','war_veteran','xindi'];
+	let shipTraits = ['','andorian','battlecruiser','borg','breen','cardassian','emp','explorer','federation','ferengi','freighter','hologram','klingon','maquis','orion_syndicate','pioneer','romulan','ruthless','scout','spore_drive','terran','tholian','transwarp','vulcan','warship','war_veteran','xindi'];
 	let selectST = document.createElement('select');
 	for (let t = 0; t < shipTraits.length; t++) {
 		let option = document.createElement('option');
@@ -236,10 +237,10 @@ function readyVoyagersForm() {
 	}
 
 	let excludeCrew = [];
-	// Use most recent exclude list, if it exists
-	if (voyage._manual_excludes) {
-		for (let i = 0; i < voyage._manual_excludes.length; i++) {
-			let excluded = sttat.crew.find(crewman => crewman.id == voyage._manual_excludes[i]);
+	// Use most recent exclude list, if one exists
+	if (sttatSession.voyageExcludeIds) {
+		for (let i = 0; i < sttatSession.voyageExcludeIds.length; i++) {
+			let excluded = sttat.crew.find(crewman => crewman.id == sttatSession.voyageExcludeIds[i]);
 			excludeCrew.push({'id': excluded.id, 'name': excluded.name});
 		}
 	}
@@ -281,6 +282,7 @@ function readyVoyagersForm() {
 		document.getElementById('voyageExcludes').classList.add('hide');
 	}
 
+	/*
 	// If prime skills target generalists (CMD, DIP, SEC),
 	//	favor voyagers who would be specialists (have at least 1 of ENG, SCI, MED)
 	if (voyage.skills.primary_skill == "command_skill" || voyage.skills.secondary_skill == "command_skill"
@@ -291,6 +293,7 @@ function readyVoyagersForm() {
 	else {
 		document.getElementById('in-specialists').checked = false;
 	}
+	*/
 
 	document.getElementById('voyagerStarter').disabled = false;
 	document.getElementById('voyageInput').classList.remove('hide');
@@ -356,44 +359,44 @@ function startVoyagers() {
 	for (let i = 0; i < excludeItems.length; i++) {
 		excludeIds.push(parseInt(excludeItems[i].getAttribute('crewId')));
 	}
+	sttatSession.voyageExcludeIds = excludeIds;
 
-	// Rosters, config are required to instantiate
-	let rosters = {
-		'crew': sttat.crew,
-		'ships': sttat.ships
-	};
+	// Crew is required to instantiate, config is for showing progress (optional)
+	let crew = sttat.crew;
 	let config = {
 		'progressCallback': showStatus,
 		'debugCallback': debugCallback
 	};
-	// Voyage, boosts are required to assemble a lineup
-	//	Options, optimize are optional
+	// Voyage data is required to assemble lineups
 	let voyage = {
 		'skills': skills,
 		'crew_slots': slots,
-		'ship_trait': document.getElementById('in-shiptrait').value,
-		'_manual_excludes': excludeIds /* Include here to remember on next recommendation */
+		'ship_trait': document.getElementById('in-shiptrait').value
 	};
-	let boosts = {
-		'primary': 3.5,
-		'secondary': 2.5,
-		'other': 1
-	};
+	// Function to filter out crew you don't want to consider (optional)
+	let filter = filterConsideredCrew;
+	// Options modify the calculation algorithm (optional)
 	let options = {
-		'excludes': excludeIds,
-		'favorSpecialists': document.getElementById('in-specialists').checked,
-		'considerFrozen': document.getElementById('in-frozen').checked,
-		'excludeImmortals': document.getElementById('in-immortals').checked,
-		'max_rarity': document.getElementById('in-maxrarity').value
-	};
-	let optimize = {
-		'calculator': ChewableConverter,
-		'maxAttempts': 10
+		'initBoosts': { 'primary': 3.5, 'secondary': 2.5, 'other': 1.0 },
+		'searchVectors': document.getElementById('in-vectors').value,
+		'luckFactor': document.getElementById('in-luckfactor').checked,
+		'favorSpecialists': document.getElementById('in-specialists').checked
 	};
 	async(function() {
-		let voyagers = new Voyagers(rosters, config);
-		voyagers.assemble(voyage, boosts, options, optimize)
-			.then(doneRecommending)
+		const ship = getBestVoyageShip(sttat.ships, voyage.ship_trait);
+		// Assemble a few lineups that match input
+		const voyagers = new Voyagers(crew, config);
+		voyagers.assemble(voyage, filter, options)
+			.then((lineups) => {
+				// Now figure out which lineup is "best"
+				showStatus("Estimating voyage time. Please wait...");
+				const analyzer = new VoyagersAnalyzer(voyage, ship, lineups);
+				analyzer.analyze(ChewableEstimator, chewableSorter)
+					.then(([lineup, estimate]) => {
+						showStatus("Ready to voyage!");
+						showRecommendation(voyage, ship, lineup, estimate);
+					});
+			})
 			.catch((error) => {
 				showFinalStatus(error, false, false);
 				readyVoyagersForm();
@@ -401,25 +404,73 @@ function startVoyagers() {
 	});
 }
 
-function doneRecommending([manifest, estimates]) {
+function getBestVoyageShip(ships, shiptrait) {
+	let consideredShips = [];
+	for (let i = 0; i < ships.length; i++) {
+		let ship = {
+			'id': ships[i].id,
+			'name': ships[i].name,
+			'antimatter': ships[i].antimatter,
+			'isIdeal': false
+		};
+		let traits = ships[i].traits;
+		if (traits.find(trait => trait == shiptrait)) {
+			ship.antimatter += 150;
+			ship.isIdeal = true;
+		}
+		consideredShips.push(ship);
+	}
+	consideredShips.sort((a, b) => b.antimatter - a.antimatter);
+	return consideredShips[0];
+}
+
+function filterConsideredCrew(crew) {
+	if (sttatSession.voyageExcludeIds.indexOf(crew.id) >= 0)
+		return true;
+	if (!document.getElementById('in-frozen').checked && crew.frozen)
+		return true;
+	if (document.getElementById('in-immortals').checked && crew.immortal)
+		return true;
+	if (document.getElementById('in-maxrarity').value && crew.max_rarity > document.getElementById('in-maxrarity').value)
+		return true;
+	return false;
+}
+
+function chewableSorter(a, b) {
+	const playItSafe = document.getElementById('in-luckfactor').checked;
+
+	let aEstimate = a.estimate.refills[0];
+	let bEstimate = b.estimate.refills[0];
+
+	// Return best average (w/ DataCore pessimism) by default
+	let aAverage = (aEstimate.result*3+aEstimate.safeResult)/4;
+	let bAverage = (bEstimate.result*3+bEstimate.safeResult)/4;
+
+	if (playItSafe || aAverage == bAverage)
+		return bEstimate.saferResult - aEstimate.saferResult;
+
+	return bAverage - aAverage;
+}
+
+function showRecommendation(voyage, ship, lineup, estimate) {
 	// Remember voyage details for next recommendation
 	//	Manifest (i.e. actual recommendations) is not saved
-	sttat.voyage = manifest.voyage;
+	sttat.voyage = voyage;
 	expertSave();
 
-	document.getElementById('out-ship').innerHTML = manifest.ship.name;
-	document.getElementById('out-shipindex').innerHTML = getShipIndex(manifest.ship.id);
-	let sShipTrait = manifest.voyage.ship_trait;
-	if (manifest.ship.isIdeal) sShipTrait += " &check;";
+	document.getElementById('out-ship').innerHTML = ship.name;
+	document.getElementById('out-shipindex').innerHTML = getShipIndex(ship.id);
+	let sShipTrait = voyage.ship_trait;
+	if (ship.isIdeal) sShipTrait += " &check;";
 	document.getElementById('out-shiptrait').innerHTML = sShipTrait;
-	document.getElementById('out-antimatter').innerHTML = manifest.ship.antimatter + manifest.lineup.antimatter;
-	document.getElementById('out-antimatter').setAttribute('title', manifest.ship.antimatter+' from the ship + '+manifest.lineup.antimatter+' from the crew');
+	document.getElementById('out-antimatter').innerHTML = ship.antimatter + lineup.antimatter;
+	document.getElementById('out-antimatter').setAttribute('title', ship.antimatter+' from the ship + '+lineup.antimatter+' from the crew');
 	for (let iSkill = 0; iSkill < SKILL_IDS.length; iSkill++) {
 		let skill = SKILL_IDS[iSkill];
 		let tdSkill = document.getElementById('out-skill['+skill+']');
-		tdSkill.innerHTML = Math.floor(manifest.lineup.skills[skill]);
-		if (skill == manifest.voyage.skills.primary_skill
-			|| skill == manifest.voyage.skills.secondary_skill) {
+		tdSkill.innerHTML = Math.floor(lineup.skills[skill]);
+		if (skill == voyage.skills.primary_skill
+			|| skill == voyage.skills.secondary_skill) {
 			tdSkill.classList.add('prime');
 		}
 		else {
@@ -427,23 +478,31 @@ function doneRecommending([manifest, estimates]) {
 		}
 	}
 	let sEstimate = "";
-	if (estimates) {
-		sEstimate = "Estimated voyage length: <b>"+estimates.print() + "</b>";
-		let sChances = estimates.printChances();
+	if (estimate) {
+		// DataCore is slightly more pessimistic than Chewable
+		let voyTime = (estimate.refills[0].result*3+estimate.refills[0].safeResult)/4;
+		sEstimate = "Estimated voyage length: <b>"+printTime(voyTime) + "</b>";
+		sEstimate += " (optimistically "+printTime(estimate.refills[0].result)+")";
+		let sChances = "";
+		if (estimate.refills[0].saferResult)
+			sChances = "99% worst case: "+printTime(estimate.refills[0].saferResult);
+		if (estimate.refills[0].dilChance && estimate.refills[0].lastDil) {
+			if (sChances != "") sChances += ", ";
+			sChances += estimate.refills[0].dilChance+"% chance to reach "+estimate.refills[0].lastDil+"h dilemma";
+		}
 		if (sChances != "") sEstimate += " ("+sChances+")";
 	}
 	document.getElementById("voyageEstimate").innerHTML = sEstimate;
 
-	for (let i = 0; i < manifest.lineup.crew.length; i++) {
-		let bonus = manifest.lineup.traits[i] ? " &check;" : "";
-		let trait = manifest.voyage.crew_slots[i].trait;
+	for (let i = 0; i < lineup.crew.length; i++) {
+		let bonus = lineup.traits[i] ? " &check;" : "";
+		let trait = voyage.crew_slots[i].trait;
 		document.getElementById('out-matched['+i+']').innerHTML = trait+bonus;
 		document.getElementById('out-crew['+i+']').innerHTML = "";
 		let span = document.createElement('span');
 		span.id = 'assigned['+i+']';
-		let assigned = sttat.crew.find(crewman => crewman.id == manifest.lineup.crew[i].id);
-		span.innerHTML = assigned.name;
-		span.setAttribute('crewId', assigned.id);
+		span.innerHTML = lineup.crew[i].name;
+		span.setAttribute('crewId', lineup.crew[i].id);
 		document.getElementById('out-crew['+i+']').appendChild(span);
 	}
 
@@ -484,6 +543,12 @@ function excludeSlot(slot) {
 	document.getElementById('assigned['+slot+']').classList.toggle('strike');
 	hideCard();
 	return false;
+}
+
+function printTime(time) {
+	let hours = Math.floor(time);
+	let minutes = Math.floor((time-hours)*60);
+	return hours+"h " +minutes+"m";
 }
 
 function editVoyage() {
@@ -1011,7 +1076,7 @@ function optimizePolestars() {
 		//	or 2) trait count is 4 and current best trait count is less than 4
 		if (testcount.polestars.length == 4 && iBestTraitCount < 4)
 			break;
-		
+
 		// Ignore if combination contains any excluded polestars
 		let bHasExclude = false;
 		excludePolestars.forEach(exclude => {
