@@ -86,21 +86,28 @@
 </table>
 <div class="optionspostnote"><a href="#" onclick="return clearAllTraits();" class="clearlink">Clear all crew traits</a></div>
 </section><!-- /voyageTraits -->
+<section id="voyageOptions" class="sub">
+<h4>Options</h4>
+<div class="optionslist">
+<p>Search Vectors: <select id="in-vectors"><option value="1">1 (Fastest)</option><option value="2" selected="selected">2 (Recommended)</option><option value="3">3</option><option value="4">4 (Thorough but slow)</option></select></p>
+<p><input id="in-luckfactor" type="checkbox" /> <label for="in-luckfactor">Favor Core over Proficiency (Your voyage will rely less on luck)</label></p>
+<p><input id="in-specialists" type="checkbox" /> <label for="in-specialists">Favor Specialists (Give a slight boost to crew with ENG, SCI, or MED)</label></p>
+</div>
+</section><!-- /voyageOptions -->
+<section id="voyageCrewOptions" class="sub">
+<h4>Crew Filters</h4>
 <section id="voyageExcludes" class="sub">
-<h4>Exclude Crew</h4>
 <p>Crew currently on shuttles and event crew will be excluded from voyage recommendations. Tap a name to clear it from the exclude list.</p>
 <div id="voyageExcludeList"></div>
 <div class="optionspostnote"><a href="#" onclick="return clearAllExcludes();" class="clearlink">Clear all excluded</a></div>
 </section><!-- /voyageExcludes -->
-<section id="voyageOptions" class="sub">
-<h4>Options</h4>
 <div class="optionslist">
-<p><input id="in-specialists" type="checkbox" /> <label for="in-specialists">Favor Specialists (Give a slight boost to crew with ENG, SCI, or MED)</label></p>
 <p id="optionrow-frozen" class="hide"><input id="in-frozen" type="checkbox" /> <label for="in-frozen">Consider Frozen Crew</label></p>
 <p><input id="in-immortals" type="checkbox" /> <label for="in-immortals">Exclude Immortal Crew</label></p>
 <p>Max Rarity: <select id="in-maxrarity"><option value="5">Legendary</option><option value="4">Super Rare</option><option value="3">Rare</option><option value="2">Uncommon</option><option value="1">Common</option></select></p>
 </div>
-</section><!-- /voyageOptions -->
+</section><!-- /voyageCrewOptions -->
+
 <div class="optionsbuttons"><button id="voyagerStarter" onclick="startVoyagers()">Recommend Voyagers</button></div>
 </div>
 
