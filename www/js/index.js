@@ -482,15 +482,15 @@ function showRecommendation(voyage, ship, lineup, estimate) {
 		// DataCore is slightly more pessimistic than Chewable
 		let voyTime = (estimate.refills[0].result*3+estimate.refills[0].safeResult)/4;
 		sEstimate = "Estimated voyage length: <b>"+printTime(voyTime) + "</b>";
-		sEstimate += " (optimistically "+printTime(estimate.refills[0].result)+")";
 		let sChances = "";
 		if (estimate.refills[0].saferResult)
-			sChances = "99% worst case: "+printTime(estimate.refills[0].saferResult);
+			sChances = "(99% worst case "+printTime(estimate.refills[0].saferResult)+")";
 		if (estimate.refills[0].dilChance && estimate.refills[0].lastDil) {
-			if (sChances != "") sChances += ", ";
-			sChances += estimate.refills[0].dilChance+"% chance to reach "+estimate.refills[0].lastDil+"h dilemma";
+			if (sChances != "") sChances += ". ";
+			sChances += estimate.refills[0].dilChance+"% chance to reach "+estimate.refills[0].lastDil+"h dilemma;";
+			sChances += " refill with "+estimate.refills[1].refillCostResult+" dilithium for a "+estimate.refills[1].dilChance+"% chance to reach the "+estimate.refills[1].lastDil+"h dilemma.";
 		}
-		if (sChances != "") sEstimate += " ("+sChances+")";
+		if (sChances != "") sEstimate += " "+sChances;
 	}
 	document.getElementById("voyageEstimate").innerHTML = sEstimate;
 

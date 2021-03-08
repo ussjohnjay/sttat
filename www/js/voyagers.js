@@ -44,7 +44,7 @@ class Voyagers {
 	//		Adjust boosts to balance lineup
 	// Return all unique lineups
 	assemble(voyage, filter = false, options = {}) {
-		this.lineups = [];
+		this.uniques = [];
 
 		this.sendProgress("Studying crew...");
 		let primedRoster = this.getPrimedRoster(voyage, filter, options);
@@ -54,21 +54,22 @@ class Voyagers {
 		return new Promise((resolve, reject) => {
 			const searchVectors = options.searchVectors ? options.searchVectors : 2;
 
-			let vectors = [];
+			let origins = [];
 			if (options.initBoosts)
-				vectors.push(options.initBoosts);
+				origins.push(options.initBoosts);
 			else
-				vectors.push({ 'primary': 3.5, 'secondary': 2.5, 'other': 1 });
-			if (searchVectors > 1) vectors.push({ 'primary': 2.0, 'secondary': 2.0, 'other': 1 });
-			if (searchVectors > 2) vectors.push({ 'primary': 1.5, 'secondary': 1.0, 'other': 1 });
-			if (searchVectors > 3) vectors.push({ 'primary': 1.0, 'secondary': 1.5, 'other': 1 });
+				origins.push({ 'primary': 3.5, 'secondary': 2.5, 'other': 1 });
+			if (searchVectors > 1) origins.push({ 'primary': 1.0, 'secondary': 1.0, 'other': 1 });
+			if (searchVectors > 2) origins.push({ 'primary': 2.0, 'secondary': 2.0, 'other': 1 });
+			if (searchVectors > 3) origins.push({ 'primary': 3.0, 'secondary': 3.0, 'other': 1 });
 
-			const promises = vectors.map((boosts, index) =>
+			const promises = origins.map((boosts, index) =>
 				self.doVector(index+1, voyage, primedRoster, boosts)
 			);
-			Promise.all(promises).then((passes) => {
-				self.sendProgress(self.lineups.length + " potential lineups assembled!");
-				resolve(self.lineups);
+			Promise.all(promises).then((vectorIds) => {
+				self.sendProgress(self.uniques.length + " potential lineups assembled!");
+				let lineups = self.uniques.map((unique) => unique.lineup);
+				resolve(lineups);
 			})
 			.catch((error) => {
 				reject(error);
@@ -146,13 +147,14 @@ class Voyagers {
 	}
 
 	doVector(vectorId, voyage, primedRoster, boosts) {
+		const maxAttempts = 10;
 		let self = this;
 		let debug = this.config.debugCallback;
 		return new Promise((resolve, reject) => {
-			let iAttempts = 0, iAttemptsAllowed = 10;
+			let iAttempts = 0;
 
 			let sequence = Promise.resolve();
-			for (let i = 0; i < iAttemptsAllowed; i++) {
+			for (let i = 0; i < maxAttempts; i++) {
 				sequence = sequence.then(() => {
 					return new Promise((resolve, reject) => {
 						setTimeout(() => {
@@ -165,15 +167,35 @@ class Voyagers {
 					});
 				})
 				.then((lineup) => {
+					// Proximity is how close a lineup is to hitting its target scores, lower is better
+					//	We'll use promixity to narrow the lineups for which to calculate estimates
 					let deviations = self.getDeviations(
 											lineup.score,
 											lineup.skills[voyage.skills.primary_skill],
 											lineup.skills[voyage.skills.secondary_skill]
 										);
+					let proximity = Math.abs(deviations.primary)+Math.abs(deviations.secondary);
+					lineup.vector = {
+						'id': vectorId,
+						'attempt': iAttempts+1,
+						'boosts': boosts,
+						'deviations': deviations,
+						'proximity': proximity
+					};
 
-					// Only keep track of lineups that haven't already been suggested
-					if (!self.lineups.find((existing) => existing.key == lineup.key)) {
-						let lineupIndex = self.lineups.length+1;
+					// Only keep track of unique lineups, but use lineup with higher AM if available
+					let existing = self.uniques.find((unique) => unique.uniqueId == lineup.key);
+					if (existing) {
+						// Proximity might be better on existing lineup (is this necessary?)
+						//if (proximity > existing.bestProximity)
+						//	lineup.proximity = existing.bestProximity;
+						if (lineup.antimatter > existing.bestAntimatter) {
+							existing.bestAntimatter = lineup.antimatter;
+							existing.lineup = lineup;
+						}
+					}
+					else {
+						let lineupIndex = self.uniques.length+1;
 						self.sendProgress("Found "+lineupIndex+" potential lineups so far...");
 						if (debug) {
 							let sLineup = "";
@@ -188,25 +210,25 @@ class Voyagers {
 									lineup.skills.science_skill+", "+lineup.skills.medicine_skill);
 							debug("Prime Deviations: "+deviations.primary.toFixed(2)+", "+deviations.secondary.toFixed(2));
 						}
-						lineup.vector = {
-							'id': vectorId,
-							'boosts': boosts,
-							'deviations': deviations,
-							'proximity': Math.abs(deviations.primary)+Math.abs(deviations.secondary)
-						};
-						self.lineups.push(lineup);
+						self.uniques.push({
+							'uniqueId': lineup.key,
+							'bestAntimatter': lineup.antimatter,
+							'bestProximity': proximity,
+							lineup
+						});
 					}
 
-					if (iAttempts+1 < iAttemptsAllowed) {
-						let finetuneRatio = 1/(iAttempts+1); // Finetune by smaller increments as attempts increase
+					if (iAttempts+1 < maxAttempts) {
+						// Finetune by smaller increments as attempts increase
+						let finetuneRatio = 1/(iAttempts+1);
 						if (finetuneRatio < 0.1) finetuneRatio = 0.1;
 						boosts = self.adjustBoosts(boosts, deviations, finetuneRatio);
 					}
 
 					iAttempts++;
 
-					// We're done with this pass
-					if (!boosts || iAttempts == iAttemptsAllowed)
+					// We're done with this vector
+					if (!boosts || iAttempts == maxAttempts)
 						resolve(vectorId);
 				});
 			}
@@ -384,7 +406,7 @@ class Voyagers {
 		return false;
 	}
 
-	// Determine targets based on total strength of roster with current boosts
+	// Determine how far off targets are based on total scores of a given lineup
 	getDeviations(totalScore, primaryScore, secondaryScore) {
 		let baseTarget = totalScore/10;
 
@@ -477,7 +499,6 @@ class VoyagersLineup {
 			lineupKey += dSkillScore+',';
 			skillScores[SKILL_IDS[iSkill]] = dSkillScore;
 		}
-		lineupKey += iBonusTraits;
 
 		this._key = lineupKey;
 		this._crew = crew;
@@ -542,8 +563,8 @@ class VoyagersAnalyzer {
 		return new Promise((resolve, reject) => {
 			// Estimating lineup runtimes is the bottleneck
 			//	Best lineups usually have low proximities relative to others, so we can reasonably limit estimates here
-			let iMaxEstimates = Math.min(5, self.lineups.length);
-			let lineups = self.lineups.sort((a, b) => a.vector.proximity - b.vector.proximity).slice(0, iMaxEstimates);
+			const maxEstimates = Math.min(5, self.lineups.length);
+			let lineups = self.lineups.sort((a, b) => a.vector.proximity - b.vector.proximity).slice(0, maxEstimates);
 
 			const estimator = new VoyagersEstimator(calculator);
 			const promises = lineups.map((lineup) =>
@@ -552,6 +573,19 @@ class VoyagersAnalyzer {
 			Promise.all(promises).then((estimates) => {
 				let sorted = estimates.sort(sorter);
 				let best = lineups.find((lineup) => lineup.key == sorted[0].lineupKey);
+				/*
+				let estimate = sorted[0].estimate.refills[0];
+				let log = {
+					'UniqueCount': self.lineups.length,
+					'Vector': best.vector.id,
+					'Attempt': best.vector.attempt,
+					'PromixityIndex': self.lineups.filter((lineup) => lineup.vector.proximity < best.vector.proximity).length,
+					'BestEstimate': (estimate.result*3+estimate.safeResult)/4,
+					'Chewable': estimate.result,
+					'SaferResult': estimate.saferResult
+				};
+				console.log(log);
+				*/
 				resolve([best, sorted[0].estimate]);
 			});
 		});
